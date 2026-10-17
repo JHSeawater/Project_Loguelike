@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { decorateWorld } from './world-art';
 import './style.css';
 
 class GameScene extends Phaser.Scene {
@@ -7,14 +8,28 @@ class GameScene extends Phaser.Scene {
   private wasd?: Record<'up' | 'down' | 'left' | 'right', Phaser.Input.Keyboard.Key>;
   private readonly moveDirection = new Phaser.Math.Vector2();
   private readonly moveSpeed = 250; // 게임 좌표 기준 픽셀/초
+  private readonly worldWidth = 3000;
+  private readonly worldHeight = 3000;
+  private readonly wallThickness = 50;
 
   constructor() {
     super('GameScene');
   }
 
   create(): void {
-    const { centerX, centerY } = this.cameras.main;
-    this.player = this.add.rectangle(centerX, centerY, 40, 40, 0x66ddaa);
+    decorateWorld(this, this.worldWidth, this.worldHeight, this.wallThickness);
+
+    this.player = this.add.rectangle(
+      this.worldWidth / 2,
+      this.worldHeight / 2,
+      40,
+      40,
+      0x66ddaa,
+    );
+
+    const camera = this.cameras.main;
+    camera.setBounds(0, 0, this.worldWidth, this.worldHeight);
+    camera.centerOn(this.player.x, this.player.y);
 
     const keyboard = this.input.keyboard;
     if (keyboard) {
@@ -42,16 +57,16 @@ class GameScene extends Phaser.Scene {
     const halfWidth = this.player.displayWidth / 2;
     const halfHeight = this.player.displayHeight / 2;
 
-    // 사각형 전체가 화면 안에 남도록 중심 좌표의 범위를 제한한다.
+    // 울타리 50픽셀과 플레이어 반지름을 모두 제외한다. 큰 delta에도 벽을 넘지 않는다.
     this.player.x = Phaser.Math.Clamp(
       this.player.x + this.moveDirection.x * distance,
-      halfWidth,
-      this.scale.width - halfWidth,
+      this.wallThickness + halfWidth,
+      this.worldWidth - this.wallThickness - halfWidth,
     );
     this.player.y = Phaser.Math.Clamp(
       this.player.y + this.moveDirection.y * distance,
-      halfHeight,
-      this.scale.height - halfHeight,
+      this.wallThickness + halfHeight,
+      this.worldHeight - this.wallThickness - halfHeight,
     );
   }
 }
@@ -62,6 +77,7 @@ new Phaser.Game({
   width: 1280,
   height: 720,
   backgroundColor: '#151923',
+  pixelArt: true,
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
