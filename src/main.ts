@@ -6,7 +6,7 @@ class GameScene extends Phaser.Scene {
   private cursors?: Phaser.Types.Input.Keyboard.CursorKeys;
   private wasd?: Record<'up' | 'down' | 'left' | 'right', Phaser.Input.Keyboard.Key>;
   private readonly moveDirection = new Phaser.Math.Vector2();
-  private readonly moveSpeed = 280; // 게임 좌표 기준 픽셀/초
+  private readonly moveSpeed = 250; // 게임 좌표 기준 픽셀/초
 
   constructor() {
     super('GameScene');
