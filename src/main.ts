@@ -54,6 +54,7 @@ class GameScene extends Phaser.Scene {
     const camera = this.cameras.main;
     camera.setBounds(0, 0, this.worldWidth, this.worldHeight);
     camera.centerOn(this.player.x, this.player.y);
+    camera.startFollow(this.player, true, 1, 1);
 
     this.add.rectangle(12, 12, 620, 97, 0x101612, 0.9).setOrigin(0).setScrollFactor(0).setDepth(20000);
     this.status = this.add.text(24, 20, '', { fontFamily: 'Malgun Gothic, sans-serif', fontSize: '17px', color: '#eeeece' })
