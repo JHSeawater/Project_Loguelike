@@ -40,6 +40,26 @@ export class PixelSurface {
       if (doubledError <= dx) { error += dx; y += stepY; }
     }
   }
+
+  polygon(points: readonly (readonly [number, number])[], color: number): void {
+    const top = Math.max(0, Math.min(...points.map((point) => point[1])));
+    const bottom = Math.min(this.height - 1, Math.max(...points.map((point) => point[1])));
+    for (let y = top; y <= bottom; y++) {
+      const intersections: number[] = [];
+      for (let i = 0; i < points.length; i++) {
+        const [ax, ay] = points[i];
+        const [bx, by] = points[(i + 1) % points.length];
+        if ((ay <= y && by > y) || (by <= y && ay > y)) {
+          intersections.push(ax + ((y - ay) * (bx - ax)) / (by - ay));
+        }
+      }
+      intersections.sort((a, b) => a - b);
+      for (let i = 0; i + 1 < intersections.length; i += 2) {
+        const left = Math.ceil(intersections[i]);
+        this.rect(left, y, Math.floor(intersections[i + 1]) - left + 1, 1, color);
+      }
+    }
+  }
 }
 
 function seededRandom(seed: number): () => number {
@@ -204,7 +224,7 @@ export function createCorner(): PixelSurface {
   return surface;
 }
 
-function installTexture(scene: Phaser.Scene, key: string, surface: PixelSurface): void {
+export function installTexture(scene: Phaser.Scene, key: string, surface: PixelSurface): void {
   if (scene.textures.exists(key)) return;
   const texture = scene.textures.createCanvas(key, surface.width, surface.height);
   if (!texture) throw new Error(`Unable to create texture: ${key}`);

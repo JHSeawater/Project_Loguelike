@@ -1,5 +1,8 @@
 import Phaser from 'phaser';
 import { decorateWorld } from './world-art';
+import { createDungeon } from './dungeon';
+import { moveAndSlide, type Box } from './collision';
+import { getFootDepth } from './render-depth';
 import './style.css';
 
 class GameScene extends Phaser.Scene {
@@ -11,6 +14,7 @@ class GameScene extends Phaser.Scene {
   private readonly worldWidth = 3000;
   private readonly worldHeight = 3000;
   private readonly wallThickness = 50;
+  private obstacles: readonly Box[] = [];
 
   constructor() {
     super('GameScene');
@@ -18,6 +22,7 @@ class GameScene extends Phaser.Scene {
 
   create(): void {
     decorateWorld(this, this.worldWidth, this.worldHeight, this.wallThickness);
+    this.obstacles = createDungeon(this);
 
     this.player = this.add.rectangle(
       this.worldWidth / 2,
@@ -26,6 +31,7 @@ class GameScene extends Phaser.Scene {
       40,
       0x66ddaa,
     );
+    this.player.setDepth(getFootDepth({ y: this.player.y - 20, height: 40 }));
 
     const camera = this.cameras.main;
     camera.setBounds(0, 0, this.worldWidth, this.worldHeight);
@@ -57,17 +63,18 @@ class GameScene extends Phaser.Scene {
     const halfWidth = this.player.displayWidth / 2;
     const halfHeight = this.player.displayHeight / 2;
 
-    // 울타리 50픽셀과 플레이어 반지름을 모두 제외한다. 큰 delta에도 벽을 넘지 않는다.
-    this.player.x = Phaser.Math.Clamp(
-      this.player.x + this.moveDirection.x * distance,
-      this.wallThickness + halfWidth,
-      this.worldWidth - this.wallThickness - halfWidth,
+    const moved = moveAndSlide(
+      { x: this.player.x - halfWidth, y: this.player.y - halfHeight,
+        width: this.player.displayWidth, height: this.player.displayHeight },
+      this.moveDirection.x * distance,
+      this.moveDirection.y * distance,
+      { x: this.wallThickness, y: this.wallThickness,
+        width: this.worldWidth - this.wallThickness * 2,
+        height: this.worldHeight - this.wallThickness * 2 },
+      this.obstacles,
     );
-    this.player.y = Phaser.Math.Clamp(
-      this.player.y + this.moveDirection.y * distance,
-      this.wallThickness + halfHeight,
-      this.worldHeight - this.wallThickness - halfHeight,
-    );
+    this.player.setPosition(moved.x + halfWidth, moved.y + halfHeight);
+    this.player.setDepth(getFootDepth(moved));
   }
 }
 
