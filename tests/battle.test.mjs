@@ -178,12 +178,38 @@ test('expired projectiles cannot deal damage and shots are cleaned at world boun
   const battle = new Battle([], { spawning: false });
   const enemy = createEnemy(100, 'paladin', 2500, 2000);
   battle.enemies.push(enemy);
+  // 수명이 이미 끝난 투사체를 적과 겹쳐 둔다. 수명 안의 적중은 아래 경계 테스트에서 따로 검사한다.
+  tick(battle, 20);
   battle.projectiles.push({ id: 700, team: 'ally', x: 2500, y: 2000, width: 8, height: 8,
     vx: 1, vy: 0, damage: 10, color: 0xffffff, expiresAt: 10 });
   tick(battle, 20);
   assert.equal(enemy.hp, 125);
   assert.ok(!battle.projectiles.some((shot) => shot.id === 700));
   assert.equal(segmentHit({ x: 0, y: 0 }, { x: 100, y: 100 }, { x: 50, y: 50, width: 10, height: 10 }), 0.5);
+});
+
+test('shots hit within their remaining lifetime inside one frame, but not at or after expiry', () => {
+  // 화면 밖 성기사(왼쪽 판정 경계 2496)를 향해 700px/초로 날아가는 남은 수명 20ms의 투사체다.
+  // 거리 8px은 약 11.4ms, 13px은 약 18.6ms, 14px은 정확히 20ms, 15px은 약 21.4ms 뒤에 닿는다.
+  const hpAfter = (gap, frame) => {
+    const battle = new Battle([], { spawning: false });
+    // 적이 대상을 찾지 못해 제자리에 있도록 플레이어를 공격 불가로 둔다.
+    battle.player.attackable = false;
+    const enemy = createEnemy(100, 'paladin', 2500, 2000);
+    battle.enemies.push(enemy);
+    battle.projectiles.push({ id: 700, team: 'ally', x: 2496 - gap - 4, y: 2046, width: 8, height: 8,
+      vx: 700, vy: 0, damage: 10, color: 0xffffff, expiresAt: 20 });
+    for (let t = 0; t < 100; t += frame) battle.update(frame, { x: 0, y: 0 }, viewAt);
+    assert.ok(!battle.projectiles.some((shot) => shot.id === 700));
+    return enemy.hp;
+  };
+  for (const frame of [5, 20, 50, 100]) {
+    assert.equal(hpAfter(8, frame), 115, `11.4ms hit, ${frame}ms frames`);
+    assert.equal(hpAfter(13, frame), 115, `18.6ms hit, ${frame}ms frames`);
+    // 만료 시점에 정확히 닿으면 이미 소멸한 것으로 보아 피해가 없다.
+    assert.equal(hpAfter(14, frame), 125, `hit exactly at expiry, ${frame}ms frames`);
+    assert.equal(hpAfter(15, frame), 125, `21.4ms hit, ${frame}ms frames`);
+  }
 });
 
 test('live dungeon simulation keeps bodies out of obstacles and each other', () => {
@@ -370,8 +396,9 @@ test('leveling up pauses everything until a reward is chosen, then resumes witho
   assert.ok(battle.choose(0));
   assert.deepEqual(battle.choices, []);
   const before = battle.time;
+  // 긴 정지 뒤의 프레임도 한 프레임 상한 250ms까지만 진행되어 몰아서 처리되지 않는다.
   battle.update(5000, { x: 0, y: 0 }, stillView);
-  assert.equal(battle.time - before, 50);
+  assert.equal(battle.time - before, 250);
 });
 
 test('multiple levels gained at once open one choice window per level in order', () => {
@@ -464,4 +491,66 @@ test('a level up in the same frame as player death keeps the game over without a
   assert.ok(battle.gameOver);
   assert.deepEqual(battle.choices, []);
   assert.equal(battle.choose(0), false);
+});
+
+test('game time and movement follow real elapsed time for short, long and irregular frames', () => {
+  const irregular = [16, 33, 100, 51, 200, 7, 93, 150, 180, 170];
+  for (const frames of [Array(50).fill(20), Array(10).fill(100), irregular]) {
+    const battle = new Battle([], { spawning: false });
+    const start = battle.player.x;
+    for (const ms of frames) battle.update(ms, { x: 1, y: 0 }, stillView);
+    assert.equal(battle.time, 1000, `${frames.length} frames`);
+    // 이동량은 250 × dt / 1000의 부동소수점 합이므로 1e-9px 안에서 비교한다.
+    assert.ok(Math.abs(battle.player.x - start - 250) < 1e-9, `${frames.length} frames`);
+  }
+});
+
+test('auto attack and spawning keep their intervals at 100ms frames', () => {
+  const shotsIn = (frame) => {
+    const battle = new Battle([], { spawning: false });
+    const enemy = createEnemy(100, 'paladin', 1950, 1480);
+    enemy.hp = 100000;
+    battle.enemies.push(enemy);
+    const ids = new Set();
+    for (let t = 0; t < 1000; t += frame) {
+      battle.update(frame, { x: 0, y: 0 }, stillView);
+      for (const shot of battle.projectiles) if (shot.team === 'ally') ids.add(shot.id);
+    }
+    return ids.size;
+  };
+  // 첫 발 이후 0.5초 간격이므로 1초 동안 2발이다.
+  assert.equal(shotsIn(20), 2);
+  assert.equal(shotsIn(100), 2);
+
+  const spawnsIn = (frame) => {
+    const battle = new Battle([], { random: seeded(31) });
+    battle.player.hp = 10000;
+    const ids = new Set();
+    for (let t = 0; t < 3700; t += frame) {
+      battle.update(frame, { x: 0, y: 0 }, stillView);
+      for (const enemy of battle.enemies) ids.add(enemy.id);
+    }
+    return ids.size;
+  };
+  // 첫 단계와 이후 1.8초마다 생성되므로 3.7초 동안 3마리다.
+  assert.equal(spawnsIn(20), 3);
+  assert.equal(spawnsIn(100), 3);
+});
+
+test('a level up or death inside a long frame stops the rest of that frame', () => {
+  const leveling = new Battle([], { spawning: false });
+  const player = center(leveling.player);
+  leveling.orbs.push(orbAt(1, player.x, player.y, 5));
+  leveling.update(200, { x: 1, y: 0 }, stillView);
+  assert.equal(leveling.choices.length, 3);
+  assert.equal(leveling.time, 50);
+  assert.equal(leveling.player.x, 1480 + 12.5);
+
+  const dying = new Battle([], { spawning: false });
+  dying.player.hp = 5;
+  dying.projectiles.push({ id: 900, team: 'enemy', x: 1460, y: 1496, width: 10, height: 10,
+    vx: 10000, vy: 0, damage: 10, color: 0xffffff, expiresAt: 5000 });
+  dying.update(200, { x: 1, y: 0 }, stillView);
+  assert.ok(dying.gameOver);
+  assert.equal(dying.time, 50);
 });

@@ -285,17 +285,20 @@ export class Battle {
   private updateProjectiles(dt: number): void {
     const active = this.projectiles;
     this.projectiles = [];
+    const stepStart = this.time - dt;
     for (const shot of active) {
       if (this.gameOver) break;
-      if (this.time >= shot.expiresAt) continue;
+      // 단계 안에서도 남은 수명만큼만 이동·판정한다. 만료 시점에 정확히 닿으면 이미 소멸한 것으로 본다.
+      const life = Math.min(dt, shot.expiresAt - stepStart);
+      if (life <= 0) continue;
       const start = center(shot);
-      const end = { x: start.x + shot.vx * dt / 1000, y: start.y + shot.vy * dt / 1000 };
+      const end = { x: start.x + shot.vx * life / 1000, y: start.y + shot.vy * life / 1000 };
       const candidates = shot.team === 'ally' ? this.enemies : this.allies;
       let hit: Actor | null = null, first = Infinity;
       for (const actor of candidates) {
         if (actor.hp <= 0 || !actor.attackable) continue;
         const time = segmentHit(start, end, expand(actor, shot.width / 2));
-        if (time !== null && time < first) { hit = actor; first = time; }
+        if (time !== null && time < first && stepStart + time * life < shot.expiresAt) { hit = actor; first = time; }
       }
       if (hit) {
         const wasAlive = hit.hp > 0;
@@ -310,10 +313,18 @@ export class Battle {
   }
 
   update(delta: number, input: Point, viewForPlayer: (player: Actor) => Box): void {
-    // 보상 선택 중에는 게임 시간을 진행하지 않으므로 모든 이동과 타이머가 멈춘다.
-    if (this.gameOver || this.choices.length) return;
-    // 비활성 탭 복귀 시 이동·공격·스폰이 한 프레임에 몰리지 않게 한다.
-    const dt = Math.max(0, Math.min(delta, 50));
+    // 낮은 FPS에서도 경과 시간을 버리지 않도록 50ms 이하 단계로 나눠 모두 진행한다.
+    // 긴 정지 뒤의 프레임은 상한까지만 반영해 이동·공격·스폰이 한꺼번에 몰리지 않게 한다.
+    let remaining = Math.max(0, Math.min(delta, CFG.maxFrameMs));
+    // 보상 선택이 열리거나 게임이 끝나면 남은 시간을 진행하지 않으므로 모든 이동과 타이머가 멈춘다.
+    while (remaining > 0 && !this.gameOver && !this.choices.length) {
+      const dt = Math.min(remaining, CFG.stepMs);
+      remaining -= dt;
+      this.step(dt, input, viewForPlayer);
+    }
+  }
+
+  private step(dt: number, input: Point, viewForPlayer: (player: Actor) => Box): void {
     this.time += dt;
     const length = Math.hypot(input.x, input.y);
     if (length) {

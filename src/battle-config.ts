@@ -13,6 +13,9 @@ export const BATTLE_CONFIG = {
   targetMs: 250,
   pathMs: 750,
   pathBudget: 4,
+  // 한 프레임의 경과 시간은 50ms 이하 단계로 나눠 모두 진행하되, 긴 정지 뒤에는 250ms까지만 반영한다.
+  stepMs: 50,
+  maxFrameMs: 250,
 } as const;
 
 export interface EnemyStats {
