@@ -2,6 +2,8 @@ import { moveAndSlide, type Box } from './collision.ts';
 import { BATTLE_CONFIG as CFG, ENEMY_STATS, SPAWN_ORDER, type EnemyKind } from './battle-config.ts';
 import { center, centerInView, contains, distanceSquared, edgeDistance, expand, overlaps, segmentHit, type Point } from './battle-geometry.ts';
 import { Navigation } from './navigation.ts';
+import { addExperience } from './experience.ts';
+import { REWARD_STEP, emptyStacks, rollChoices, statsFor, type RewardId } from './rewards.ts';
 
 export interface Actor extends Box {
   id: number;
@@ -32,9 +34,15 @@ export interface Projectile extends Box {
   color: number;
 }
 
+export interface ExpOrb extends Box {
+  id: number;
+  value: number;
+  pulled: boolean;
+}
+
 export function createEnemy(id: number, kind: EnemyKind, x: number, y: number, now = 0): Enemy {
   const stats = ENEMY_STATS[kind];
-  return { id, kind, x, y, width: stats.size, height: stats.size, hp: stats.hp, maxHp: stats.hp,
+  return { id, kind, x, y, width: stats.width, height: stats.height, hp: stats.hp, maxHp: stats.hp,
     attackable: true, lastHitAt: -Infinity, targetId: null, nextThinkAt: now,
     nextPathAt: now, nextAttackAt: now, path: [], pathIndex: 0, stuckMs: 0 };
 }
@@ -59,9 +67,24 @@ export class Battle {
   readonly allies: Actor[] = [this.player];
   enemies: Enemy[] = [];
   projectiles: Projectile[] = [];
+  // 생성 순서대로 유지해 상한 초과 시 가장 오래된 구슬을 찾는다.
+  orbs: ExpOrb[] = [];
   time = 0;
   kills = 0;
+  level = 1;
+  experience = 0;
   gameOver = false;
+  // 보상은 이번 게임에서만 유지된다. 능력치는 중첩 수로 다시 계산한다.
+  readonly rewardStacks = emptyStacks();
+  stats = statsFor(this.rewardStacks);
+  // 선택지가 열려 있는 동안 전투 전체가 일시정지된다.
+  choices: RewardId[] = [];
+  private pendingLevelUps = 0;
+
+  // 아직 보상을 고르지 않은 레벨업 수. 현재 열린 선택창을 포함한다.
+  get pendingChoices(): number {
+    return this.pendingLevelUps;
+  }
   private readonly obstacles: readonly Box[];
   private readonly navigation: Navigation;
   private readonly random: () => number;
@@ -81,15 +104,15 @@ export class Battle {
 
   spawnEnemy(kind: EnemyKind, view: Box): Enemy | null {
     if (this.enemies.length >= CFG.maxEnemies || this.gameOver) return null;
-    const size = ENEMY_STATS[kind].size;
+    const { width, height } = ENEMY_STATS[kind];
     const area = expand(view, 550);
     const left = Math.max(CFG.world.x, area.x);
     const top = Math.max(CFG.world.y, area.y);
-    const right = Math.min(CFG.world.x + CFG.world.width, area.x + area.width) - size;
-    const bottom = Math.min(CFG.world.y + CFG.world.height, area.y + area.height) - size;
+    const right = Math.min(CFG.world.x + CFG.world.width, area.x + area.width) - width;
+    const bottom = Math.min(CFG.world.y + CFG.world.height, area.y + area.height) - height;
     if (right < left || bottom < top) return null;
     for (let attempt = 0; attempt < 120; attempt++) {
-      const body = { x: left + this.random() * (right - left), y: top + this.random() * (bottom - top), width: size, height: size };
+      const body = { x: left + this.random() * (right - left), y: top + this.random() * (bottom - top), width, height };
       if (!contains(CFG.world, body) || overlaps(body, expand(view, CFG.spawnMargin))) continue;
       if (this.obstacles.some((obstacle) => overlaps(body, obstacle))) continue;
       if ([...this.allies, ...this.enemies].some((actor) => actor.hp > 0 && overlaps(body, actor))) continue;
@@ -106,6 +129,8 @@ export class Battle {
     if (target === this.player && this.time - target.lastHitAt < CFG.player.hurtMs) return false;
     target.hp = Math.max(0, target.hp - damage);
     target.lastHitAt = this.time;
+    // 살아 있던 적이 이 피해로 죽을 때만 구슬을 만들므로 처치 주체와 관계없이 한 번만 생긴다.
+    if (target.hp === 0 && this.enemies.includes(target as Enemy)) this.dropOrb(target as Enemy);
     if (target === this.player && target.hp === 0) {
       this.gameOver = true;
       for (const ally of this.allies) ally.hp = 0;
@@ -114,13 +139,75 @@ export class Battle {
     return true;
   }
 
+  private dropOrb(enemy: Enemy): void {
+    const value = ENEMY_STATS[enemy.kind].exp;
+    if (this.orbs.length >= CFG.expOrb.max) {
+      this.orbs[0].value += value;
+      return;
+    }
+    const { x, y } = center(enemy), size = CFG.expOrb.size;
+    this.orbs.push({ id: this.nextId++, x: x - size / 2, y: y - size / 2, width: size, height: size, value, pulled: false });
+  }
+
+  private updateOrbs(dt: number): void {
+    const target = center(this.player);
+    const remaining: ExpOrb[] = [];
+    for (const orb of this.orbs) {
+      const from = center(orb);
+      const distance = Math.hypot(target.x - from.x, target.y - from.y);
+      // 반경 경계를 포함한다. 한 번 끌려온 구슬은 플레이어가 멀어져도 계속 따라간다.
+      if (distance <= this.stats.pickupRadius) orb.pulled = true;
+      if (orb.pulled && distance > 0) {
+        // 플레이어 중심을 넘어가지 않도록 이동량을 남은 거리로 제한한다.
+        const move = Math.min(distance, CFG.expOrb.pullSpeed * dt / 1000);
+        orb.x += (target.x - from.x) / distance * move;
+        orb.y += (target.y - from.y) / distance * move;
+      }
+      if (overlaps(orb, this.player)) {
+        const before = this.level;
+        ({ level: this.level, experience: this.experience } = addExperience(this, orb.value));
+        this.pendingLevelUps += this.level - before;
+      } else remaining.push(orb);
+    }
+    this.orbs = remaining;
+  }
+
+  // 오른 레벨 수만큼 선택창을 순서대로 열고, 매번 그 시점의 보상 상태로 새로 구성한다.
+  private openNextChoices(): void {
+    if (this.gameOver || this.choices.length || this.pendingLevelUps <= 0) return;
+    this.choices = rollChoices(this.rewardStacks, this.stats.choiceCount, this.random);
+  }
+
+  choose(index: number): boolean {
+    if (this.gameOver || !Number.isInteger(index) || index < 0 || index >= this.choices.length) return false;
+    const id = this.choices[index];
+    this.choices = [];
+    this.pendingLevelUps--;
+    this.applyReward(id);
+    this.openNextChoices();
+    return true;
+  }
+
+  applyReward(id: RewardId): void {
+    this.rewardStacks[id]++;
+    if (id === 'maxHp') {
+      this.player.maxHp += REWARD_STEP.maxHp;
+      this.player.hp += REWARD_STEP.maxHp;
+    } else if (id === 'heal') {
+      this.player.hp = Math.min(this.player.maxHp,
+        this.player.hp + Math.floor(this.player.maxHp * REWARD_STEP.healPercent / 100));
+    }
+    this.stats = statsFor(this.rewardStacks);
+  }
+
   private fire(owner: Actor, target: Actor, team: Projectile['team'], damage: number, color: number): void {
     const config = team === 'ally' ? CFG.playerShot : CFG.enemyShot;
+    const speed = team === 'ally' ? this.stats.shotSpeed : config.speed;
     const from = center(owner), to = center(target);
     const length = Math.hypot(to.x - from.x, to.y - from.y) || 1;
     this.projectiles.push({ id: this.nextId++, team, x: from.x - config.size / 2, y: from.y - config.size / 2,
-      width: config.size, height: config.size, vx: (to.x - from.x) / length * config.speed,
-      vy: (to.y - from.y) / length * config.speed, damage, expiresAt: this.time + config.lifeMs, color });
+      width: config.size, height: config.size, vx: (to.x - from.x) / length * speed,
+      vy: (to.y - from.y) / length * speed, damage, expiresAt: this.time + config.lifeMs, color });
   }
 
   private moveEnemy(enemy: Enemy, target: Actor, dt: number): void {
@@ -129,13 +216,13 @@ export class Battle {
     if (!stats.ranged && edgeDistance(enemy, target) <= 0.75) return;
     const from = center(enemy), destination = center(target);
     let waypoint: Point | undefined;
-    if (this.navigation.canTravel(from, destination, enemy.width)) {
+    if (this.navigation.canTravel(from, destination, enemy.width, enemy.height)) {
       waypoint = destination;
       enemy.path = []; enemy.pathIndex = 0;
     } else {
       if (this.time >= enemy.nextPathAt && this.pathBudget > 0) {
         this.pathBudget--;
-        enemy.path = this.navigation.findPath(from, destination, enemy.width) ?? [];
+        enemy.path = this.navigation.findPath(from, destination, enemy.width, enemy.height) ?? [];
         enemy.pathIndex = 0;
         enemy.nextPathAt = this.time + CFG.pathMs + enemy.id % 4 * 50;
       }
@@ -223,13 +310,14 @@ export class Battle {
   }
 
   update(delta: number, input: Point, viewForPlayer: (player: Actor) => Box): void {
-    if (this.gameOver) return;
+    // 보상 선택 중에는 게임 시간을 진행하지 않으므로 모든 이동과 타이머가 멈춘다.
+    if (this.gameOver || this.choices.length) return;
     // 비활성 탭 복귀 시 이동·공격·스폰이 한 프레임에 몰리지 않게 한다.
     const dt = Math.max(0, Math.min(delta, 50));
     this.time += dt;
     const length = Math.hypot(input.x, input.y);
     if (length) {
-      const distance = CFG.player.speed * dt / 1000;
+      const distance = this.stats.speed * dt / 1000;
       const moved = moveAndSlide(this.player, input.x / length * distance, input.y / length * distance,
         CFG.world, [...this.obstacles, ...this.enemies.filter((enemy) => enemy.hp > 0),
           ...this.allies.filter((ally) => ally !== this.player && ally.hp > 0)]);
@@ -243,13 +331,17 @@ export class Battle {
     }
     this.updateEnemies(dt);
     if (this.gameOver) return;
-    if (this.time - this.lastPlayerAttackAt >= CFG.player.attackMs) {
+    if (this.time - this.lastPlayerAttackAt >= this.stats.attackMs) {
       const target = nearestTarget(this.player, this.enemies, view);
       if (target) {
-        this.fire(this.player, target, 'ally', CFG.player.damage, CFG.playerShot.color);
+        this.fire(this.player, target, 'ally', this.stats.damage, CFG.playerShot.color);
         this.lastPlayerAttackAt = this.time;
       }
     }
     this.updateProjectiles(dt);
+    // 같은 프레임에 플레이어가 사망하면 구슬 획득과 레벨업 선택이 일어나지 않는다.
+    if (this.gameOver) return;
+    this.updateOrbs(dt);
+    this.openNextChoices();
   }
 }

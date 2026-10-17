@@ -201,3 +201,267 @@ test('live dungeon simulation keeps bodies out of obstacles and each other', () 
   }
   assert.ok(battle.time >= 18000);
 });
+
+test('knight and paladin bodies use the decided rectangular sizes and melee range 1', () => {
+  const knight = createEnemy(1, 'knight', 500, 500);
+  const paladin = createEnemy(2, 'paladin', 500, 500);
+  assert.deepEqual([knight.width, knight.height], [120, 80]);
+  assert.deepEqual([paladin.width, paladin.height], [80, 120]);
+  assert.equal(ENEMY_STATS.knight.range, 40);
+  const battle = new Battle(dungeonObstacles, { random: seeded(29) });
+  const view = viewAt(battle.player);
+  for (const kind of ['knight', 'paladin']) {
+    const enemy = battle.spawnEnemy(kind, view);
+    assert.ok(enemy, kind);
+    assert.deepEqual([enemy.width, enemy.height], [ENEMY_STATS[kind].width, ENEMY_STATS[kind].height]);
+    assert.ok(!overlaps(enemy, expand(view, CFG.spawnMargin)));
+    assert.ok(dungeonObstacles.every((obstacle) => !overlaps(enemy, obstacle)));
+  }
+});
+
+const orbAt = (id, cx, cy, value = 1) => ({ id, x: cx - CFG.expOrb.size / 2, y: cy - CFG.expOrb.size / 2,
+  width: CFG.expOrb.size, height: CFG.expOrb.size, value, pulled: false });
+const stillView = () => ({ x: 860, y: 1140, width: 1280, height: 720 });
+const step = (battle, ms, size, input = { x: 0, y: 0 }) => {
+  for (let remaining = ms; remaining > 0; remaining -= size) battle.update(Math.min(size, remaining), input, stillView);
+};
+
+test('every enemy kind drops one orb with its table experience at its center', () => {
+  const expected = { soldier: 1, knight: 3, paladin: 4, archer: 1, mage: 2 };
+  for (const [kind, value] of Object.entries(expected)) {
+    assert.equal(ENEMY_STATS[kind].exp, value);
+    const battle = new Battle([], { spawning: false });
+    const enemy = createEnemy(100, kind, 2000, 2000);
+    battle.enemies.push(enemy);
+    battle.dealDamage(enemy, 1000);
+    assert.equal(battle.orbs.length, 1, kind);
+    assert.equal(battle.orbs[0].value, value);
+    assert.deepEqual(center(battle.orbs[0]), center(enemy));
+    // 처치 주체와 관계없이 발생하고, 이미 죽은 적에게 다시 피해를 주어도 중복되지 않는다.
+    battle.dealDamage(enemy, 1000);
+    assert.equal(battle.orbs.length, 1);
+  }
+});
+
+test('several shots killing one enemy in the same frame count one kill and drop one orb', () => {
+  const battle = new Battle([], { spawning: false });
+  const enemy = createEnemy(100, 'soldier', 1700, 1480);
+  enemy.hp = 10;
+  battle.enemies.push(enemy);
+  for (const id of [700, 701, 702]) {
+    battle.projectiles.push({ id, team: 'ally', x: 1650, y: 1496, width: 8, height: 8,
+      vx: 10000, vy: 0, damage: 10, color: 0xffffff, expiresAt: 5000 });
+  }
+  battle.update(20, { x: 0, y: 0 }, stillView);
+  assert.equal(battle.kills, 1);
+  assert.equal(battle.orbs.length, 1);
+  assert.equal(battle.enemies.length, 0);
+  assert.equal(battle.orbs[0].value, 1);
+});
+
+test('orbs over the cap merge into the oldest orb and preserve total experience', () => {
+  const battle = new Battle([], { spawning: false });
+  let total = 0;
+  for (let i = 0; i < CFG.expOrb.max + 3; i++) {
+    const enemy = createEnemy(100 + i, i % 2 ? 'paladin' : 'soldier', 200 + i % 20 * 100, 200 + Math.floor(i / 20) * 100);
+    battle.enemies.push(enemy);
+    battle.dealDamage(enemy, 1000);
+    total += ENEMY_STATS[enemy.kind].exp;
+  }
+  assert.equal(battle.orbs.length, CFG.expOrb.max);
+  assert.equal(battle.orbs.reduce((sum, orb) => sum + orb.value, 0), total);
+  // 첫 구슬(병사 1)에 상한을 넘긴 병사 1·성기사 4·병사 1이 차례로 더해진다.
+  assert.equal(battle.orbs[0].value, 1 + 1 + 4 + 1);
+});
+
+test('orbs never expire and only orbs within the pickup radius are pulled', () => {
+  const battle = new Battle([], { spawning: false });
+  const player = center(battle.player);
+  const r = CFG.player.pickupRadius;
+  // 경계를 포함한다: 정확히 반경 거리의 구슬은 끌려오고, 반경 바로 밖의 구슬은 움직이지 않는다.
+  battle.orbs.push(orbAt(1, player.x + r, player.y), orbAt(2, player.x - r - 0.01, player.y),
+    orbAt(3, player.x, player.y + r - 0.01));
+  step(battle, 20, 20);
+  assert.ok(battle.orbs.find((orb) => orb.id === 1).pulled);
+  assert.ok(battle.orbs.find((orb) => orb.id === 3).pulled);
+  assert.equal(battle.orbs.find((orb) => orb.id === 2).pulled, false);
+  step(battle, 60000, 50);
+  assert.deepEqual(battle.orbs.map((orb) => orb.id), [2]);
+  assert.equal(center(battle.orbs[0]).x, player.x - r - 0.01);
+  assert.deepEqual({ level: battle.level, experience: battle.experience }, { level: 1, experience: 2 });
+});
+
+test('orb pull movement and pickup time do not depend on frame size', () => {
+  const run = (size) => {
+    const battle = new Battle([], { spawning: false });
+    const player = center(battle.player);
+    battle.orbs.push(orbAt(1, player.x + CFG.player.pickupRadius, player.y, 3));
+    step(battle, 100, size);
+    const x = center(battle.orbs[0]).x;
+    step(battle, 100, size);
+    return { x, collected: battle.orbs.length === 0, experience: battle.experience };
+  };
+  // 반경 100px에서 몸체가 닿을 때까지 (100 - 20 - 6)px를 450px/초로 이동하므로 약 164ms에 획득한다.
+  const results = [10, 20, 50].map(run);
+  for (const result of results) {
+    assert.ok(Math.abs(result.x - (1500 + 100 - 45)) < 1e-9);
+    assert.deepEqual([result.collected, result.experience], [true, 3]);
+  }
+});
+
+test('pulled orbs keep chasing a fleeing player and are never overshot', () => {
+  const battle = new Battle([], { spawning: false });
+  const player = center(battle.player);
+  battle.orbs.push(orbAt(1, player.x + CFG.player.pickupRadius, player.y, 2));
+  step(battle, 20, 20);
+  step(battle, 1000, 50, { x: -1, y: 0 });
+  assert.equal(battle.orbs.length, 0);
+  assert.equal(battle.experience, 2);
+  const near = new Battle([], { spawning: false });
+  near.orbs.push(orbAt(2, center(near.player).x + 27, center(near.player).y));
+  near.update(50, { x: 0, y: 0 }, stillView);
+  assert.equal(near.orbs.length, 0);
+  assert.equal(near.experience, 1);
+});
+
+test('picking up enough orbs levels up with carry-over, and nothing is gained after game over', () => {
+  const battle = new Battle([], { spawning: false });
+  const player = center(battle.player);
+  battle.orbs.push(orbAt(1, player.x, player.y, 4), orbAt(2, player.x, player.y, 4));
+  battle.update(20, { x: 0, y: 0 }, stillView);
+  assert.deepEqual({ level: battle.level, experience: battle.experience }, { level: 2, experience: 3 });
+
+  const dying = new Battle([], { spawning: false });
+  dying.player.hp = 5;
+  dying.orbs.push(orbAt(3, center(dying.player).x, center(dying.player).y, 4));
+  dying.projectiles.push({ id: 900, team: 'enemy', x: 1460, y: 1496, width: 10, height: 10,
+    vx: 10000, vy: 0, damage: 10, color: 0xffffff, expiresAt: 5000 });
+  dying.update(20, { x: 0, y: 0 }, stillView);
+  assert.ok(dying.gameOver);
+  assert.deepEqual({ level: dying.level, experience: dying.experience }, { level: 1, experience: 0 });
+  dying.update(20, { x: 0, y: 0 }, stillView);
+  assert.equal(dying.experience, 0);
+  // 게임 종료 후에는 피해와 처치가 일어나지 않으므로 새 구슬도 생기지 않는다.
+  const enemy = createEnemy(100, 'soldier', 2000, 2000);
+  dying.enemies.push(enemy);
+  dying.dealDamage(enemy, 1000);
+  assert.deepEqual(dying.orbs.map((orb) => orb.id), [3]);
+});
+
+const levelUp = (battle, value = 5) => {
+  const player = center(battle.player);
+  battle.orbs.push(orbAt(9000 + battle.orbs.length, player.x, player.y, value));
+  battle.update(20, { x: 0, y: 0 }, stillView);
+};
+
+test('leveling up pauses everything until a reward is chosen, then resumes without a burst', () => {
+  const battle = new Battle(dungeonObstacles, { random: seeded(5) });
+  step(battle, 3000, 20);
+  levelUp(battle);
+  assert.equal(battle.level, 2);
+  assert.equal(battle.choices.length, 3);
+  assert.equal(new Set(battle.choices).size, 3);
+  const snapshot = JSON.stringify({ time: battle.time, player: battle.player, enemies: battle.enemies,
+    projectiles: battle.projectiles, orbs: battle.orbs });
+  for (const size of [10, 50, 1000]) step(battle, 3000, size, { x: 1, y: 1 });
+  assert.equal(JSON.stringify({ time: battle.time, player: battle.player, enemies: battle.enemies,
+    projectiles: battle.projectiles, orbs: battle.orbs }), snapshot);
+  assert.equal(battle.choose(3), false);
+  assert.ok(battle.choose(0));
+  assert.deepEqual(battle.choices, []);
+  const before = battle.time;
+  battle.update(5000, { x: 0, y: 0 }, stillView);
+  assert.equal(battle.time - before, 50);
+});
+
+test('multiple levels gained at once open one choice window per level in order', () => {
+  const battle = new Battle([], { spawning: false, random: seeded(8) });
+  levelUp(battle, 20);
+  assert.equal(battle.level, 3);
+  assert.equal(battle.choices.length, 3);
+  assert.ok(battle.choose(1));
+  assert.equal(battle.choices.length, 3);
+  assert.ok(battle.choose(2));
+  assert.deepEqual(battle.choices, []);
+  assert.equal(battle.choose(0), false);
+});
+
+test('the choice reward widens the very next window up to five options', () => {
+  const battle = new Battle([], { spawning: false, random: seeded(2) });
+  levelUp(battle, 5 + 10 + 15);
+  assert.equal(battle.choices.length, 3);
+  battle.choices = ['choices', ...battle.choices.filter((id) => id !== 'choices').slice(0, 2)];
+  battle.choose(0);
+  assert.equal(battle.choices.length, 4);
+  battle.choices = ['choices', ...battle.choices.filter((id) => id !== 'choices').slice(0, 3)];
+  battle.choose(0);
+  assert.equal(battle.choices.length, 5);
+  assert.ok(!battle.choices.includes('choices'));
+});
+
+test('stat rewards change attack damage, move speed, shot speed and pickup radius', () => {
+  const battle = new Battle([], { spawning: false });
+  for (const id of ['damage', 'moveSpeed', 'shotSpeed', 'pickupRadius']) battle.applyReward(id);
+  const start = battle.player.x;
+  step(battle, 1000, 20, { x: 1, y: 0 });
+  assert.ok(Math.abs(battle.player.x - start - 275) < 1e-9);
+  const enemy = createEnemy(100, 'paladin', 1950, 1480);
+  enemy.hp = 10000;
+  battle.enemies.push(enemy);
+  battle.update(20, { x: 0, y: 0 }, stillView);
+  const shot = battle.projectiles.find((item) => item.team === 'ally');
+  assert.equal(shot.damage, 12);
+  assert.ok(Math.abs(Math.hypot(shot.vx, shot.vy) - 805) < 1e-9);
+  const player = center(battle.player);
+  battle.orbs.push(orbAt(1, player.x, player.y + 125));
+  battle.update(20, { x: 0, y: 0 }, stillView);
+  assert.ok(battle.orbs.find((orb) => orb.id === 1).pulled);
+});
+
+test('attack speed rewards shorten the auto attack interval', () => {
+  const countShots = (stacks) => {
+    const battle = new Battle([], { spawning: false });
+    for (let i = 0; i < stacks; i++) battle.applyReward('attackSpeed');
+    const enemy = createEnemy(100, 'paladin', 1950, 1480);
+    enemy.hp = 100000;
+    battle.enemies.push(enemy);
+    const ids = new Set();
+    for (let t = 0; t < 1000; t += 20) {
+      battle.update(20, { x: 0, y: 0 }, stillView);
+      for (const shot of battle.projectiles) if (shot.team === 'ally') ids.add(shot.id);
+    }
+    return ids.size;
+  };
+  // 첫 발은 20ms에 발사된다. 1초 동안 0.5초 간격은 2발, 0.45초는 3발, 0.25초는 4발이다.
+  assert.equal(countShots(0), 2);
+  assert.equal(countShots(1), 3);
+  assert.equal(countShots(5), 4);
+});
+
+test('max health rewards raise current health and healing never exceeds max health', () => {
+  const battle = new Battle([], { spawning: false });
+  battle.player.hp = 50;
+  battle.applyReward('maxHp');
+  assert.deepEqual([battle.player.hp, battle.player.maxHp], [70, 120]);
+  battle.applyReward('heal');
+  assert.equal(battle.player.hp, 106);
+  battle.applyReward('heal');
+  assert.equal(battle.player.hp, 120);
+  for (let i = 0; i < 9; i++) battle.applyReward('maxHp');
+  assert.deepEqual([battle.player.hp, battle.player.maxHp], [300, 300]);
+  battle.player.hp = 1;
+  battle.applyReward('heal');
+  assert.equal(battle.player.hp, 91);
+});
+
+test('a level up in the same frame as player death keeps the game over without a choice window', () => {
+  const battle = new Battle([], { spawning: false });
+  battle.player.hp = 5;
+  battle.orbs.push(orbAt(3, center(battle.player).x, center(battle.player).y, 5));
+  battle.projectiles.push({ id: 900, team: 'enemy', x: 1460, y: 1496, width: 10, height: 10,
+    vx: 10000, vy: 0, damage: 10, color: 0xffffff, expiresAt: 5000 });
+  battle.update(20, { x: 0, y: 0 }, stillView);
+  assert.ok(battle.gameOver);
+  assert.deepEqual(battle.choices, []);
+  assert.equal(battle.choose(0), false);
+});

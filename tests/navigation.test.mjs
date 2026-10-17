@@ -35,3 +35,21 @@ test('unreachable goals return null rather than crossing a world-spanning wall',
   ]);
   assert.equal(navigation.findPath({ x: 100, y: 300 }, { x: 500, y: 300 }, 40), null);
 });
+
+test('rectangular bodies use their own width and height when passing a narrow gap', () => {
+  const navigation = new Navigation({ x: 0, y: 0, width: 500, height: 500 }, [
+    { x: 200, y: 0, width: 40, height: 200 },
+    { x: 200, y: 300, width: 40, height: 200 },
+  ]);
+  const from = { x: 90, y: 250 }, to = { x: 410, y: 250 };
+  // 100px 높이의 틈은 높이 80인 가로형 몸체만 통과하고 높이 120인 세로형 몸체는 통과하지 못한다.
+  const path = navigation.findPath(from, to, 120, 80);
+  assert.ok(path);
+  let previous = from;
+  for (const point of path) {
+    assert.ok(navigation.canTravel(previous, point, 120, 80));
+    previous = point;
+  }
+  assert.equal(navigation.canTravel(from, to, 80, 120), false);
+  assert.equal(navigation.findPath(from, to, 80, 120), null);
+});

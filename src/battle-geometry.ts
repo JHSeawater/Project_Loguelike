@@ -53,7 +53,7 @@ export function segmentHit(start: Point, end: Point, box: Box): number | null {
   return near;
 }
 
-export function expand(box: Box, padding: number): Box {
-  return { x: box.x - padding, y: box.y - padding,
-    width: box.width + padding * 2, height: box.height + padding * 2 };
+export function expand(box: Box, padding: number, paddingY = padding): Box {
+  return { x: box.x - padding, y: box.y - paddingY,
+    width: box.width + padding * 2, height: box.height + paddingY * 2 };
 }

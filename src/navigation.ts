@@ -38,7 +38,7 @@ export class Navigation {
   private readonly cell: number;
   private readonly columns: number;
   private readonly rows: number;
-  private grids = new Map<number, Uint8Array>();
+  private grids = new Map<string, Uint8Array>();
 
   constructor(bounds: Box, obstacles: readonly Box[], cell = 20) {
     this.bounds = bounds; this.obstacles = obstacles; this.cell = cell;
@@ -46,16 +46,16 @@ export class Navigation {
     this.rows = Math.ceil(bounds.height / cell);
   }
 
-  canTravel(from: Point, to: Point, size: number): boolean {
-    const half = size / 2;
-    const at = (point: Point): Box => ({ x: point.x - half, y: point.y - half, width: size, height: size });
+  canTravel(from: Point, to: Point, width: number, height = width): boolean {
+    const halfX = width / 2, halfY = height / 2;
+    const at = (point: Point): Box => ({ x: point.x - halfX, y: point.y - halfY, width, height });
     if (!contains(this.bounds, at(from)) || !contains(this.bounds, at(to))) return false;
-    const minX = Math.min(from.x, to.x) - half, maxX = Math.max(from.x, to.x) + half;
-    const minY = Math.min(from.y, to.y) - half, maxY = Math.max(from.y, to.y) + half;
+    const minX = Math.min(from.x, to.x) - halfX, maxX = Math.max(from.x, to.x) + halfX;
+    const minY = Math.min(from.y, to.y) - halfY, maxY = Math.max(from.y, to.y) + halfY;
     for (const obstacle of this.obstacles) {
       if (obstacle.x > maxX || obstacle.x + obstacle.width < minX
         || obstacle.y > maxY || obstacle.y + obstacle.height < minY) continue;
-      if (segmentHit(from, to, expand(obstacle, half - 0.001)) !== null) return false;
+      if (segmentHit(from, to, expand(obstacle, halfX - 0.001, halfY - 0.001)) !== null) return false;
     }
     return true;
   }
@@ -65,20 +65,21 @@ export class Navigation {
       y: this.bounds.y + (Math.floor(index / this.columns) + 0.5) * this.cell };
   }
 
-  private grid(size: number): Uint8Array {
-    const cached = this.grids.get(size);
+  private grid(width: number, height: number): Uint8Array {
+    const key = `${width}x${height}`;
+    const cached = this.grids.get(key);
     if (cached) return cached;
     const grid = new Uint8Array(this.columns * this.rows);
     for (let i = 0; i < grid.length; i++) {
       const point = this.point(i);
-      const body = { x: point.x - size / 2, y: point.y - size / 2, width: size, height: size };
+      const body = { x: point.x - width / 2, y: point.y - height / 2, width, height };
       if (!contains(this.bounds, body) || this.obstacles.some((obstacle) => overlaps(body, obstacle))) grid[i] = 1;
     }
-    this.grids.set(size, grid);
+    this.grids.set(key, grid);
     return grid;
   }
 
-  private nearest(point: Point, grid: Uint8Array, size: number, connect: boolean): number | null {
+  private nearest(point: Point, grid: Uint8Array, width: number, height: number, connect: boolean): number | null {
     const cx = Math.floor((point.x - this.bounds.x) / this.cell);
     const cy = Math.floor((point.y - this.bounds.y) / this.cell);
     for (let radius = 0; radius <= 12; radius++) {
@@ -90,18 +91,18 @@ export class Navigation {
         if (grid[index]) continue;
         const candidate = this.point(index);
         const d = (point.x - candidate.x) ** 2 + (point.y - candidate.y) ** 2;
-        if (d < distance && (!connect || this.canTravel(point, candidate, size))) { best = index; distance = d; }
+        if (d < distance && (!connect || this.canTravel(point, candidate, width, height))) { best = index; distance = d; }
       }
       if (best !== null) return best;
     }
     return null;
   }
 
-  findPath(from: Point, to: Point, size: number): Point[] | null {
-    if (this.canTravel(from, to, size)) return [to];
-    const grid = this.grid(size);
-    const start = this.nearest(from, grid, size, true);
-    const goal = this.nearest(to, grid, size, false);
+  findPath(from: Point, to: Point, width: number, height = width): Point[] | null {
+    if (this.canTravel(from, to, width, height)) return [to];
+    const grid = this.grid(width, height);
+    const start = this.nearest(from, grid, width, height, true);
+    const goal = this.nearest(to, grid, width, height, false);
     if (start === null || goal === null) return null;
     const cost = new Float64Array(grid.length).fill(Infinity);
     const parent = new Int32Array(grid.length).fill(-1);
@@ -121,7 +122,7 @@ export class Navigation {
         const path: Point[] = [];
         for (let index = goal; index !== -1; index = parent[index]) path.push(this.point(index));
         path.reverse();
-        if (this.canTravel(path[path.length - 1], to, size)) path.push(to);
+        if (this.canTravel(path[path.length - 1], to, width, height)) path.push(to);
         return path;
       }
       closed[current] = 1;
@@ -132,7 +133,7 @@ export class Navigation {
         if (grid[next] || closed[next]) continue;
         if (dx && dy && (grid[y * this.columns + x + dx] || grid[(y + dy) * this.columns + x])) continue;
         // 셀 사이의 얇은 장애물도 실제 크기로 확인해 통과하지 못하게 한다.
-        if (!this.canTravel(this.point(current), this.point(next), size)) continue;
+        if (!this.canTravel(this.point(current), this.point(next), width, height)) continue;
         const nextCost = cost[current] + (dx && dy ? Math.SQRT2 : 1);
         if (nextCost >= cost[next]) continue;
         cost[next] = nextCost; parent[next] = current;
