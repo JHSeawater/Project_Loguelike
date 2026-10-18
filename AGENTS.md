@@ -23,8 +23,14 @@
 - UI 관련 방침은 [docs/ui/AGENTS.md](docs/ui/AGENTS.md)를 참고한다.
 - 경험치·레벨 설계는 [docs/Experience.md](docs/Experience.md)를 참고한다.
 - 레벨업 보상 설계와 보류 항목은 [docs/LevelUpReward.md](docs/LevelUpReward.md)를 참고한다.
+- 전투 초기 구현의 임시 수치와 결정 사항은 [docs/CombatImplementation.md](docs/CombatImplementation.md)를 참고한다.
 
 ## 테스트 개발 규칙
+
+### 테스트 실행 환경
+
+- `npm test`는 Node 내장 테스트 실행기(`node --test`)로 `*.test.mjs` 파일을 실행하고, `src`의 `.ts` 파일을 직접 불러온다. Node 22.18 이상(23.x는 23.6 이상)이 필요하다.
+- 테스트가 불러오는 모듈은 값 import에 `.ts` 확장자를 붙인다. 또한 `enum`, `namespace`, 생성자 매개변수 속성처럼 타입 제거만으로 실행할 수 없는 문법을 쓰지 않는다. 둘 다 `npm run build`는 통과하지만 `npm test`는 실패한다.
 
 ### 코드 변경 시 테스트 관리
 
