@@ -1,11 +1,16 @@
-import { BATTLE_CONFIG as CFG } from './battle-config.ts';
+import { BATTLE_CONFIG as CFG, CHARACTER_STATS, SKILL_CONFIG as SKILL, type CharacterId } from './battle-config.ts';
 
-export type RewardId = 'damage' | 'attackSpeed' | 'maxHp' | 'moveSpeed' | 'shotSpeed' | 'pickupRadius' | 'choices' | 'heal';
+export type CommonRewardId = 'damage' | 'attackSpeed' | 'maxHp' | 'moveSpeed' | 'shotSpeed' | 'pickupRadius' | 'choices' | 'heal';
+export type SkillId = 'multiShot' | 'explosion' | 'soulHarvest' | 'homing' | 'swingRange' | 'bloodThirst' | 'deathLord';
+export type RewardId = CommonRewardId | SkillId;
 
 export interface RewardDef {
   name: string;
   effect: string;
   maxStacks: number;
+  // 직업 특기만 가진다. 특수 특기는 낮은 가중치로 뽑히고 한 번만 얻는다.
+  character?: CharacterId;
+  special?: boolean;
 }
 
 // 기본값 기준 고정 증가량을 더한다. 효과량과 최대 중첩은 플레이 테스트로 조정한다.
@@ -24,14 +29,37 @@ export const REWARDS: Record<RewardId, RewardDef> = {
   pickupRadius: { name: '획득 반경 확대', effect: `획득 반경 +${REWARD_STEP.pickupRadius}`, maxStacks: 5 },
   choices: { name: '선택지 추가', effect: `레벨업 선택지 +${REWARD_STEP.choices}`, maxStacks: 2 },
   heal: { name: '체력 회복', effect: `최대 체력의 ${REWARD_STEP.healPercent}% 회복`, maxStacks: Infinity },
+  multiShot: { name: '다중 시전', effect: '발사 수 +1', maxStacks: Infinity, character: 'warlock' },
+  explosion: { name: '마력 폭발', effect: `폭발 반경 +${SKILL.explosion.radiusStep}\n주변 적에게 공격력의 ${SKILL.explosion.damagePercent}%`,
+    maxStacks: Infinity, character: 'warlock' },
+  soulHarvest: { name: '영혼 흡수', effect: `경험치 획득량 +${SKILL.soulHarvest.percentStep}%`, maxStacks: Infinity, character: 'warlock' },
+  homing: { name: '추적 마탄', effect: '투사체가 가까운 적을\n향해 방향을 바꾼다', maxStacks: 1, character: 'warlock', special: true },
+  swingRange: { name: '참격 확장', effect: `공격 반경 +${SKILL.swingRange.radiusStep}`, maxStacks: Infinity, character: 'deathKnight' },
+  bloodThirst: { name: '피의 갈증', effect: `처치 시 회복 +${SKILL.bloodThirst.healStep}`, maxStacks: Infinity, character: 'deathKnight' },
+  deathLord: { name: '죽음의 군주', effect: `공격력·이동속도·최대 체력 +${SKILL.deathLord.percent}%\n공격 간격 −${SKILL.deathLord.percent}%`,
+    maxStacks: 1, character: 'deathKnight', special: true },
 };
 
-export const REWARD_IDS = Object.keys(REWARDS) as RewardId[];
+// 모든 직업에 공통인 보상. 직업 특기는 SKILL_IDS에 따로 둔다.
+export const REWARD_IDS: CommonRewardId[] = ['damage', 'attackSpeed', 'maxHp', 'moveSpeed', 'shotSpeed', 'pickupRadius', 'choices', 'heal'];
+export const SKILL_IDS: SkillId[] = ['multiShot', 'explosion', 'soulHarvest', 'homing', 'swingRange', 'bloodThirst', 'deathLord'];
+
+// 직업 컨셉에 맞지 않는 공통 보상. 투사체가 없는 데스 나이트는 투사체 속도 강화를 받지 않는다.
+const EXCLUDED_REWARDS: Record<CharacterId, readonly CommonRewardId[]> = {
+  warlock: [],
+  deathKnight: ['shotSpeed'],
+};
+
+// 직업의 선택지 후보: 제외 항목을 뺀 공통 보상과 그 직업의 특기를 같은 목록에 섞는다.
+export function rewardPool(character: CharacterId): RewardId[] {
+  return [...REWARD_IDS.filter((id) => !EXCLUDED_REWARDS[character].includes(id)),
+    ...SKILL_IDS.filter((id) => REWARDS[id].character === character)];
+}
 
 export type RewardStacks = Record<RewardId, number>;
 
 export function emptyStacks(): RewardStacks {
-  return Object.fromEntries(REWARD_IDS.map((id) => [id, 0])) as RewardStacks;
+  return Object.fromEntries([...REWARD_IDS, ...SKILL_IDS].map((id) => [id, 0])) as RewardStacks;
 }
 
 export interface PlayerStats {
@@ -43,25 +71,60 @@ export interface PlayerStats {
   choiceCount: number;
 }
 
+// 죽음의 군주는 공통 보상까지 더한 값에 비율로 적용한다.
+const lordScale = (stacks: RewardStacks): number => stacks.deathLord ? SKILL.deathLord.percent / 100 : 0;
+
 // 최대 체력과 회복은 현재 체력과 함께 바뀌므로 전투에서 직접 적용하고, 나머지는 중첩 수로 계산한다.
-export function statsFor(stacks: RewardStacks): PlayerStats {
+export function statsFor(stacks: RewardStacks, character: CharacterId = 'warlock'): PlayerStats {
+  const base = CHARACTER_STATS[character], lord = lordScale(stacks);
   return {
-    damage: CFG.player.damage + stacks.damage * REWARD_STEP.damage,
-    attackMs: CFG.player.attackMs - stacks.attackSpeed * REWARD_STEP.attackMs,
-    speed: CFG.player.speed + stacks.moveSpeed * REWARD_STEP.speed,
+    damage: Math.round((base.damage + stacks.damage * REWARD_STEP.damage) * (1 + lord)),
+    attackMs: Math.round((base.attackMs - stacks.attackSpeed * REWARD_STEP.attackMs) * (1 - lord)),
+    speed: Math.round((base.speed + stacks.moveSpeed * REWARD_STEP.speed) * (1 + lord)),
     shotSpeed: CFG.playerShot.speed + stacks.shotSpeed * REWARD_STEP.shotSpeed,
     pickupRadius: CFG.player.pickupRadius + stacks.pickupRadius * REWARD_STEP.pickupRadius,
     choiceCount: BASE_CHOICES + stacks.choices * REWARD_STEP.choices,
   };
 }
 
-// 최대 중첩에 도달하지 않은 보상 중 중복 없이 같은 확률로 고른다. 후보가 부족하면 남은 보상만 돌려준다.
-export function rollChoices(stacks: RewardStacks, count: number, random: () => number): RewardId[] {
-  const pool = REWARD_IDS.filter((id) => stacks[id] < REWARDS[id].maxStacks);
+export function maxHpFor(stacks: RewardStacks, character: CharacterId = 'warlock'): number {
+  return Math.round((CHARACTER_STATS[character].hp + stacks.maxHp * REWARD_STEP.maxHp) * (1 + lordScale(stacks)));
+}
+
+export interface SkillStats {
+  shots: number;
+  explosionRadius: number;
+  // 경험치 획득 배율(백분율). 정수로 계산해 소수점 이월이 정확하도록 한다.
+  expPercent: number;
+  homing: boolean;
+  swingRadius: number;
+  killHeal: number;
+}
+
+export function skillStatsFor(stacks: RewardStacks, character: CharacterId = 'warlock'): SkillStats {
+  const base = CHARACTER_STATS[character];
+  return {
+    shots: 1 + stacks.multiShot,
+    explosionRadius: stacks.explosion * SKILL.explosion.radiusStep,
+    expPercent: 100 + stacks.soulHarvest * SKILL.soulHarvest.percentStep,
+    homing: stacks.homing > 0,
+    swingRadius: base.swingRadius + stacks.swingRange * SKILL.swingRange.radiusStep,
+    killHeal: base.killHeal + stacks.bloodThirst * SKILL.bloodThirst.healStep,
+  };
+}
+
+// 최대 중첩에 도달하지 않은 후보 중 중복 없이 고른다. 특수 특기는 낮은 가중치, 나머지는 같은 확률이다.
+// 후보가 부족하면 남은 보상만 돌려준다. 후보를 주지 않으면 공통 보상에서 고른다.
+export function rollChoices(stacks: RewardStacks, count: number, random: () => number,
+  pool: readonly RewardId[] = REWARD_IDS): RewardId[] {
+  const candidates = pool.filter((id) => stacks[id] < REWARDS[id].maxStacks);
   const picked: RewardId[] = [];
-  while (picked.length < count && pool.length) {
-    const index = Math.min(pool.length - 1, Math.floor(random() * pool.length));
-    picked.push(pool.splice(index, 1)[0]);
+  while (picked.length < count && candidates.length) {
+    const weights = candidates.map((id) => REWARDS[id].special ? SKILL.specialWeight : 1);
+    let roll = random() * weights.reduce((sum, weight) => sum + weight, 0);
+    let index = 0;
+    while (index < candidates.length - 1 && roll >= weights[index]) roll -= weights[index++];
+    picked.push(candidates.splice(index, 1)[0]);
   }
   return picked;
 }

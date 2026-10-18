@@ -1,9 +1,10 @@
 export type EnemyKind = 'soldier' | 'knight' | 'paladin' | 'archer' | 'mage';
+export type CharacterId = 'warlock' | 'deathKnight';
 
 export const BATTLE_CONFIG = {
   world: { x: 50, y: 50, width: 2900, height: 2900 },
-  // 획득 반경은 향후 성장할 수 있는 플레이어 능력치다. 현재는 초기값으로 고정한다.
-  player: { size: 40, hp: 100, damage: 10, speed: 250, attackMs: 500, hurtMs: 3000, pickupRadius: 100 },
+  // 모든 직업에 공통인 플레이어 값이다. 획득 반경은 '획득 반경 확대' 보상으로 늘어난다.
+  player: { size: 40, hurtMs: 3000, pickupRadius: 100 },
   playerShot: { speed: 700, size: 8, lifeMs: 4000, color: 0xf5e6a8 },
   enemyShot: { speed: 280, size: 10, lifeMs: 6000 },
   expOrb: { size: 12, pullSpeed: 450, max: 300 },
@@ -40,6 +41,40 @@ export const ENEMY_STATS: Record<EnemyKind, EnemyStats> = {
   archer: { name: '궁사', width: 40, height: 40, hp: 10, damage: 5, speed: 110, range: 280, attackMs: 5000, ranged: true, color: 0xa7c26b, exp: 1 },
   mage: { name: '마법사', width: 40, height: 40, hp: 15, damage: 10, speed: 90, range: 200, attackMs: 10000, ranged: true, color: 0xbc83d6, exp: 2 },
 };
+
+export interface CharacterStats {
+  name: string;
+  hp: number;
+  damage: number;
+  speed: number;
+  attackMs: number;
+  attack: 'shot' | 'swing';
+  // 휘두르기 직업의 기본 공격 반경과 처치 시 회복량. 해당 패시브가 없는 직업은 0이다.
+  swingRadius: number;
+  killHeal: number;
+  color: number;
+}
+
+// 직업별 시작 능력치. 크기 40×40과 피격 간격 3초는 모든 직업이 같다.
+export const CHARACTER_STATS: Record<CharacterId, CharacterStats> = {
+  warlock: { name: '워록', hp: 100, damage: 10, speed: 250, attackMs: 500, attack: 'shot', swingRadius: 0, killHeal: 0, color: 0x66ddaa },
+  deathKnight: { name: '데스 나이트', hp: 140, damage: 14, speed: 230, attackMs: 800, attack: 'swing', swingRadius: 100, killHeal: 1, color: 0x9b7ad8 },
+};
+
+// 직업 패시브와 특기의 초기값. 플레이 테스트로 조정한다.
+export const SKILL_CONFIG = {
+  surge: { durationMs: 5000, percent: 20 },
+  multiShot: { spreadDeg: 10, maxSpreadDeg: 60 },
+  explosion: { radiusStep: 20, damagePercent: 50 },
+  soulHarvest: { percentStep: 10 },
+  homing: { turnDegPerSec: 270 },
+  swingRange: { radiusStep: 15 },
+  bloodThirst: { healStep: 1 },
+  deathLord: { percent: 20 },
+  // 특수 특기가 선택지에 뽑힐 가중치. 다른 후보는 1이다.
+  specialWeight: 0.1,
+  effectMs: 150,
+} as const;
 
 export const SPAWN_ORDER: readonly EnemyKind[] = [
   'soldier', 'archer', 'soldier', 'knight', 'mage', 'soldier', 'paladin', 'soldier', 'archer', 'mage',

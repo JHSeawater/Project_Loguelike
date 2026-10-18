@@ -3,13 +3,15 @@ import { decorateWorld } from './world-art';
 import { createDungeon } from './dungeon';
 import { getFootDepth } from './render-depth';
 import { Battle } from './battle';
-import { BATTLE_CONFIG, ENEMY_STATS } from './battle-config';
+import { BATTLE_CONFIG, CHARACTER_STATS, ENEMY_STATS, SKILL_CONFIG } from './battle-config';
 import { experienceToNextLevel } from './experience';
-import { REWARDS, type RewardId } from './rewards';
+import { REWARDS, type RewardDef, type RewardId } from './rewards';
 import './style.css';
 
 const FONT = 'Malgun Gothic, sans-serif';
 const CHOICE_CARD = { width: 220, height: 250, gap: 20, top: 230 };
+// 카드 테두리: 공통 보상, 직업 무한 특기, 특수 특기를 구분한다.
+const cardStroke = (reward: RewardDef): number => reward.special ? 0xe0b84a : reward.character ? 0x9b7ad8 : 0x5f7a70;
 // 선택창이 열린 직후 이동·연속 입력이 의도치 않은 선택으로 이어지지 않게 한다.
 const CHOICE_INPUT_DELAY_MS = 300;
 
@@ -19,6 +21,7 @@ class GameScene extends Phaser.Scene {
   private enemyViews = new Map<number, Phaser.GameObjects.Rectangle>();
   private shotViews = new Map<number, Phaser.GameObjects.Rectangle>();
   private orbViews = new Map<number, Phaser.GameObjects.Rectangle>();
+  private effectViews = new Map<number, Phaser.GameObjects.Arc>();
   private status!: Phaser.GameObjects.Text;
   private healthFill!: Phaser.GameObjects.Rectangle;
   private expFill!: Phaser.GameObjects.Rectangle;
@@ -47,7 +50,7 @@ class GameScene extends Phaser.Scene {
       this.worldHeight / 2,
       40,
       40,
-      0x66ddaa,
+      CHARACTER_STATS[this.battle.character].color,
     );
     this.player.setDepth(getFootDepth({ y: this.player.y - 20, height: 40 }));
 
@@ -153,11 +156,28 @@ class GameScene extends Phaser.Scene {
     for (const [id, view] of this.orbViews) {
       if (!liveOrbs.has(id)) { view.destroy(); this.orbViews.delete(id); }
     }
+    // 휘두르기·폭발 범위를 판정에 쓴 반경 그대로 잠시 보여주고 흐리게 사라지게 한다.
+    const liveEffects = new Set<number>();
+    for (const effect of battle.effects) {
+      liveEffects.add(effect.id);
+      let view = this.effectViews.get(effect.id);
+      if (!view) {
+        const color = effect.kind === 'swing' ? 0xc9b8ff : 0xffa64d;
+        view = this.add.circle(effect.x, effect.y, effect.radius, color, 0.18).setStrokeStyle(2, color).setDepth(10001);
+        this.effectViews.set(effect.id, view);
+      }
+      view.setAlpha(Math.max(0, 1 - (battle.time - effect.at) / SKILL_CONFIG.effectMs));
+    }
+    for (const [id, view] of this.effectViews) {
+      if (!liveEffects.has(id)) { view.destroy(); this.effectViews.delete(id); }
+    }
     this.status.setText(`체력 ${battle.player.hp}/${battle.player.maxHp}    생존 ${(battle.time / 1000).toFixed(1)}초    적 ${battle.enemies.length}    처치 ${battle.kills}`);
     this.healthFill.setDisplaySize(180 * battle.player.hp / battle.player.maxHp, 10);
     const need = experienceToNextLevel(battle.level);
     this.expFill.setDisplaySize(180 * battle.experience / need, 6);
-    this.levelText.setText(`Lv ${battle.level}   ${battle.experience}/${need}`);
+    const surgeLeft = battle.surgeUntil - battle.time;
+    this.levelText.setText(`Lv ${battle.level}   ${battle.experience}/${need}`
+      + (surgeLeft > 0 ? `    마력 폭주 ${(surgeLeft / 1000).toFixed(1)}초` : ''));
     // 선택할 때마다 새 선택지 배열이 만들어지므로 연속 레벨업에서도 창을 다시 구성한다.
     if (battle.choices !== this.shownChoices) this.showChoices(battle.choices);
     if (battle.gameOver && !this.shownGameOver) {
@@ -196,14 +216,17 @@ class GameScene extends Phaser.Scene {
       const reward = REWARDS[id];
       const x = 640 - total / 2 + index * (CHOICE_CARD.width + CHOICE_CARD.gap) + CHOICE_CARD.width / 2;
       const y = CHOICE_CARD.top + CHOICE_CARD.height / 2;
+      const stroke = cardStroke(reward);
       const card = fixed(this.add.rectangle(x, y, CHOICE_CARD.width, CHOICE_CARD.height, 0x1c2420)
-        .setStrokeStyle(2, 0x5f7a70), 25001);
+        .setStrokeStyle(2, stroke), 25001);
       card.setInteractive({ useHandCursor: true })
         .on('pointerover', () => card.setStrokeStyle(3, 0x9fd0ff))
-        .on('pointerout', () => card.setStrokeStyle(2, 0x5f7a70))
+        .on('pointerout', () => card.setStrokeStyle(2, stroke))
         .on('pointerdown', () => this.pickChoice(index));
       const stacks = this.battle.rewardStacks[id];
-      const stackText = Number.isFinite(reward.maxStacks) ? `중첩 ${stacks}/${reward.maxStacks}` : '중첩 제한 없음';
+      const stackText = reward.special ? '특수 특기 · 1회 획득'
+        : Number.isFinite(reward.maxStacks) ? `중첩 ${stacks}/${reward.maxStacks}`
+        : reward.character ? `직업 특기 · 중첩 ${stacks}` : '중첩 제한 없음';
       const lines: [number, string, string, string][] = [
         [-95, `[${index + 1}]`, '18px', '#9fd0ff'],
         [-50, reward.name, '21px', '#eeeece'],

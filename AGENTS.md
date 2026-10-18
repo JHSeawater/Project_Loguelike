@@ -23,6 +23,7 @@
 - UI 관련 방침은 [docs/ui/AGENTS.md](docs/ui/AGENTS.md)를 참고한다.
 - 경험치·레벨 설계는 [docs/Experience.md](docs/Experience.md)를 참고한다.
 - 레벨업 보상 설계와 보류 항목은 [docs/LevelUpReward.md](docs/LevelUpReward.md)를 참고한다.
+- 직업별 능력치·패시브·특기 설계와 보류 구상은 [docs/Classes.md](docs/Classes.md)를 참고한다.
 - 전투 초기 구현의 임시 수치와 결정 사항은 [docs/CombatImplementation.md](docs/CombatImplementation.md)를 참고한다.
 
 ## 테스트 개발 규칙
