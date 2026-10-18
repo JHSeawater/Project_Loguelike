@@ -3,19 +3,18 @@ import { decorateWorld } from './world-art';
 import { createDungeon } from './dungeon';
 import { getFootDepth } from './render-depth';
 import { Battle } from './battle';
-import { BATTLE_CONFIG, CHARACTER_STATS, ENEMY_STATS, SKILL_CONFIG } from './battle-config';
+import { BATTLE_CONFIG, CHARACTER_STATS, ENEMY_STATS, SKILL_CONFIG, type CharacterId } from './battle-config';
 import { experienceToNextLevel } from './experience';
 import { REWARDS, type RewardDef, type RewardId } from './rewards';
+import { CharacterSelectScene, FONT, INPUT_DELAY_MS, TitleScene } from './menu-scenes';
 import './style.css';
 
-const FONT = 'Malgun Gothic, sans-serif';
 const CHOICE_CARD = { width: 220, height: 250, gap: 20, top: 230 };
 // 카드 테두리: 공통 보상, 직업 무한 특기, 특수 특기를 구분한다.
 const cardStroke = (reward: RewardDef): number => reward.special ? 0xe0b84a : reward.character ? 0x9b7ad8 : 0x5f7a70;
-// 선택창이 열린 직후 이동·연속 입력이 의도치 않은 선택으로 이어지지 않게 한다.
-const CHOICE_INPUT_DELAY_MS = 300;
 
 class GameScene extends Phaser.Scene {
+  private character: CharacterId = 'warlock';
   private player!: Phaser.GameObjects.Rectangle;
   private battle!: Battle;
   private enemyViews = new Map<number, Phaser.GameObjects.Rectangle>();
@@ -27,6 +26,7 @@ class GameScene extends Phaser.Scene {
   private expFill!: Phaser.GameObjects.Rectangle;
   private levelText!: Phaser.GameObjects.Text;
   private shownGameOver = false;
+  private gameOverAt = 0;
   private choiceViews: Phaser.GameObjects.GameObject[] = [];
   private shownChoices: readonly RewardId[] = [];
   private choiceOpenedAt = 0;
@@ -41,9 +41,22 @@ class GameScene extends Phaser.Scene {
     super('GameScene');
   }
 
+  // 캐릭터 선택 화면에서 고른 직업을 받는다. 직접 시작하면 워록이다.
+  init(data: { character?: CharacterId }): void {
+    this.character = data.character ?? 'warlock';
+  }
+
   create(): void {
+    // Phaser는 장면 객체를 다시 쓰므로, 이전 판의 표시 목록과 상태를 비우고 시작한다.
+    this.enemyViews = new Map();
+    this.shotViews = new Map();
+    this.orbViews = new Map();
+    this.effectViews = new Map();
+    this.shownGameOver = false;
+    this.choiceViews = [];
+    this.shownChoices = [];
     decorateWorld(this, this.worldWidth, this.worldHeight, this.wallThickness);
-    this.battle = new Battle(createDungeon(this));
+    this.battle = new Battle(createDungeon(this), { character: this.character });
 
     this.player = this.add.rectangle(
       this.worldWidth / 2,
@@ -86,7 +99,17 @@ class GameScene extends Phaser.Scene {
       };
       const { ONE, TWO, THREE, FOUR, FIVE } = Phaser.Input.Keyboard.KeyCodes;
       this.choiceKeys = [ONE, TWO, THREE, FOUR, FIVE].map((code) => keyboard.addKey(code));
+      keyboard.on('keydown', (event: KeyboardEvent) => {
+        if (event.code === 'Enter' && !event.repeat) this.leaveGameOver();
+      });
     }
+    this.input.on('pointerdown', () => this.leaveGameOver());
+  }
+
+  // 게임 종료 화면에서 Enter나 클릭으로 캐릭터 선택 화면으로 돌아간다. 종료 직후의 입력은 무시한다.
+  private leaveGameOver(): void {
+    if (!this.shownGameOver || this.time.now - this.gameOverAt < INPUT_DELAY_MS) return;
+    this.scene.start('CharacterSelectScene');
   }
 
   update(_time: number, delta: number): void {
@@ -182,15 +205,16 @@ class GameScene extends Phaser.Scene {
     if (battle.choices !== this.shownChoices) this.showChoices(battle.choices);
     if (battle.gameOver && !this.shownGameOver) {
       this.shownGameOver = true;
+      this.gameOverAt = this.time.now;
       this.add.rectangle(640, 360, 1280, 720, 0x060a08, 0.78).setScrollFactor(0).setDepth(30000);
-      this.add.text(640, 360, `게임 종료\n\n생존 ${(battle.time / 1000).toFixed(1)}초 · 처치 ${battle.kills} · Lv ${battle.level}\n\n새로고침하여 다시 시작`, {
-        fontFamily: 'Malgun Gothic, sans-serif', fontSize: '30px', color: '#e5e3c8', align: 'center',
+      this.add.text(640, 360, `게임 종료\n\n${CHARACTER_STATS[battle.character].name} · 생존 ${(battle.time / 1000).toFixed(1)}초 · 처치 ${battle.kills} · Lv ${battle.level}\n\nEnter 또는 클릭: 캐릭터 선택으로`, {
+        fontFamily: FONT, fontSize: '30px', color: '#e5e3c8', align: 'center',
       }).setOrigin(0.5).setScrollFactor(0).setDepth(30001);
     }
   }
 
   private pickChoice(index: number): void {
-    if (!this.battle.choices.length || this.time.now - this.choiceOpenedAt < CHOICE_INPUT_DELAY_MS) return;
+    if (!this.battle.choices.length || this.time.now - this.choiceOpenedAt < INPUT_DELAY_MS) return;
     if (this.battle.choose(index)) this.syncBattle();
   }
 
@@ -234,7 +258,9 @@ class GameScene extends Phaser.Scene {
         [90, stackText, '15px', '#8f9c8a'],
       ];
       for (const [offset, text, fontSize, color] of lines) {
-        fixed(this.add.text(x, y + offset, text, { fontFamily: FONT, fontSize, color, align: 'center' }).setOrigin(0.5), 25002);
+        fixed(this.add.text(x, y + offset, text, {
+          fontFamily: FONT, fontSize, color, align: 'center', wordWrap: { width: CHOICE_CARD.width - 24, useAdvancedWrap: true },
+        }).setOrigin(0.5), 25002);
       }
     });
   }
@@ -251,5 +277,6 @@ new Phaser.Game({
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
   },
-  scene: GameScene,
+  // 타이틀 → 캐릭터 선택 → 게임 순서로 진행한다. 첫 번째 장면이 처음 열린다.
+  scene: [TitleScene, CharacterSelectScene, GameScene],
 });

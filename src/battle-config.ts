@@ -58,7 +58,7 @@ export interface CharacterStats {
 // 직업별 시작 능력치. 크기 40×40과 피격 간격 3초는 모든 직업이 같다.
 export const CHARACTER_STATS: Record<CharacterId, CharacterStats> = {
   warlock: { name: '워록', hp: 100, damage: 10, speed: 250, attackMs: 500, attack: 'shot', swingRadius: 0, killHeal: 0, color: 0x66ddaa },
-  deathKnight: { name: '데스 나이트', hp: 140, damage: 14, speed: 230, attackMs: 800, attack: 'swing', swingRadius: 100, killHeal: 1, color: 0x9b7ad8 },
+  deathKnight: { name: '데스 나이트', hp: 140, damage: 14, speed: 230, attackMs: 800, attack: 'swing', swingRadius: 100, killHeal: 1, color: 0xe0d8c3 },
 };
 
 // 직업 패시브와 특기의 초기값. 플레이 테스트로 조정한다.
