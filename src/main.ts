@@ -72,7 +72,7 @@ class GameScene extends Phaser.Scene {
     camera.centerOn(this.player.x, this.player.y);
     camera.startFollow(this.player, true, 1, 1);
 
-    this.add.rectangle(12, 12, 620, 97, 0x101612, 0.9).setOrigin(0).setScrollFactor(0).setDepth(20000);
+    this.add.rectangle(12, 12, 620, 112, 0x101612, 0.9).setOrigin(0).setScrollFactor(0).setDepth(20000);
     this.status = this.add.text(24, 20, '', { fontFamily: 'Malgun Gothic, sans-serif', fontSize: '17px', color: '#eeeece' })
       .setScrollFactor(0).setDepth(20001);
     this.add.rectangle(24, 50, 180, 10, 0x383d32).setOrigin(0).setScrollFactor(0).setDepth(20001);
@@ -81,8 +81,9 @@ class GameScene extends Phaser.Scene {
     this.expFill = this.add.rectangle(24, 65, 0, 6, 0x6fb8ff).setOrigin(0).setScrollFactor(0).setDepth(20002);
     this.levelText = this.add.text(216, 52, '', { fontFamily: 'Malgun Gothic, sans-serif', fontSize: '14px', color: '#9fd0ff' })
       .setScrollFactor(0).setDepth(20001);
+    // 적 범례는 한 줄에 5종씩 두 줄로 표시한다.
     Object.values(ENEMY_STATS).forEach((stats, index) => {
-      this.add.text(24 + index * 105, 82, `■ ${stats.name}`, {
+      this.add.text(24 + index % 5 * 105, 80 + Math.floor(index / 5) * 20, `■ ${stats.name}`, {
         fontFamily: 'Malgun Gothic, sans-serif', fontSize: '14px', color: `#${stats.color.toString(16).padStart(6, '0')}`,
       }).setScrollFactor(0).setDepth(20001);
     });
@@ -185,7 +186,7 @@ class GameScene extends Phaser.Scene {
       liveEffects.add(effect.id);
       let view = this.effectViews.get(effect.id);
       if (!view) {
-        const color = effect.kind === 'swing' ? 0xc9b8ff : 0xffa64d;
+        const color = effect.kind === 'swing' ? 0xc9b8ff : effect.kind === 'heal' ? 0xe58fb8 : 0xffa64d;
         view = this.add.circle(effect.x, effect.y, effect.radius, color, 0.18).setStrokeStyle(2, color).setDepth(10001);
         this.effectViews.set(effect.id, view);
       }

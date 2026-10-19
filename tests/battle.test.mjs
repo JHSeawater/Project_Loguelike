@@ -532,9 +532,9 @@ test('auto attack and spawning keep their intervals at 100ms frames', () => {
     }
     return ids.size;
   };
-  // 첫 단계와 이후 1.8초마다 생성되므로 3.7초 동안 3마리다.
-  assert.equal(spawnsIn(20), 3);
-  assert.equal(spawnsIn(100), 3);
+  // 첫 단계와 이후 1.0초마다 생성되므로 3.7초 동안 4마리다.
+  assert.equal(spawnsIn(20), 4);
+  assert.equal(spawnsIn(100), 4);
 });
 
 test('a level up or death inside a long frame stops the rest of that frame', () => {

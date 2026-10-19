@@ -1,6 +1,6 @@
 import { moveAndSlide, type Box } from './collision.ts';
-import { BATTLE_CONFIG as CFG, CHARACTER_STATS, ENEMY_STATS, SKILL_CONFIG as SKILL, SPAWN_ORDER,
-  type CharacterId, type EnemyKind } from './battle-config.ts';
+import { BATTLE_CONFIG as CFG, CHARACTER_STATS, ENEMY_STATS, SKILL_CONFIG as SKILL, SPAWN_PATTERNS, SPAWN_STAGES, SPAWN_WEIGHTS,
+  type CharacterId, type EnemyKind, type SpawnStage } from './battle-config.ts';
 import { center, centerInView, contains, distanceSquared, edgeDistance, expand, overlaps, segmentHit, type Point } from './battle-geometry.ts';
 import { Navigation } from './navigation.ts';
 import { addExperience } from './experience.ts';
@@ -38,10 +38,10 @@ export interface Projectile extends Box {
   homing?: boolean;
 }
 
-// 휘두르기와 폭발의 범위를 잠시 보여주기 위한 기록. 판정에는 쓰지 않는다.
+// 휘두르기·폭발·사제 회복의 범위를 잠시 보여주기 위한 기록. 판정에는 쓰지 않는다.
 export interface AttackEffect {
   id: number;
-  kind: 'swing' | 'explosion';
+  kind: 'swing' | 'explosion' | 'heal';
   x: number;
   y: number;
   radius: number;
@@ -54,11 +54,37 @@ export interface ExpOrb extends Box {
   pulled: boolean;
 }
 
-export function createEnemy(id: number, kind: EnemyKind, x: number, y: number, now = 0): Enemy {
+// hpPercent: 생성 시점의 체력 배율(백분율). 정수로 계산한 뒤 반올림한다.
+export function createEnemy(id: number, kind: EnemyKind, x: number, y: number, now = 0, hpPercent = 100): Enemy {
   const stats = ENEMY_STATS[kind];
-  return { id, kind, x, y, width: stats.width, height: stats.height, hp: stats.hp, maxHp: stats.hp,
+  const hp = Math.round(stats.hp * hpPercent / 100);
+  return { id, kind, x, y, width: stats.width, height: stats.height, hp, maxHp: hp,
     attackable: true, lastHitAt: -Infinity, targetId: null, nextThinkAt: now,
     nextPathAt: now, nextAttackAt: now, path: [], pathIndex: 0, stuckMs: 0 };
+}
+
+// 게임 시간에 해당하는 생성 단계. 경계 시점부터 다음 단계를 쓴다.
+export function stageAt(time: number): SpawnStage {
+  let current = SPAWN_STAGES[0];
+  for (const stage of SPAWN_STAGES) if (time >= stage.at) current = stage;
+  return current;
+}
+
+// 그 시점까지 등장한 종류 중 가중치로 고른다. 광신도는 가중치가 없어 일반 생성에 나오지 않는다.
+export function pickSpawnKind(time: number, random: () => number): EnemyKind {
+  const kinds = SPAWN_STAGES.filter((stage) => time >= stage.at).flatMap((stage) => stage.adds)
+    .filter((kind) => SPAWN_WEIGHTS[kind]);
+  const weights = kinds.map((kind) => SPAWN_WEIGHTS[kind] ?? 0);
+  let roll = random() * weights.reduce((sum, weight) => sum + weight, 0);
+  let index = 0;
+  while (index < kinds.length - 1 && roll >= weights[index]) roll -= weights[index++];
+  return kinds[index];
+}
+
+// 10:00에는 100%, 이후 1분마다 기본 체력의 10%씩 더한 백분율.
+export function hpPercentAt(time: number): number {
+  const growth = SPAWN_PATTERNS.hpGrowth;
+  return time < growth.from ? 100 : 100 + growth.percent * Math.floor((time - growth.from) / growth.everyMs);
 }
 
 export function nearestTarget<T extends Actor>(source: Box, targets: readonly T[], view?: Box, preferredId?: number | null): T | null {
@@ -122,7 +148,8 @@ export class Battle {
   private readonly spawning: boolean;
   private nextId = 1;
   private nextSpawnAt = 0;
-  private spawnIndex = 0;
+  private nextGroupAt: number = SPAWN_PATTERNS.zealotGroup.from;
+  private ringIndex = 0;
   private lastPlayerAttackAt = -Infinity;
   private pathBudget = 0;
 
@@ -141,10 +168,12 @@ export class Battle {
     this.spawning = options.spawning ?? true;
   }
 
-  spawnEnemy(kind: EnemyKind, view: Box): Enemy | null {
-    if (this.enemies.length >= CFG.maxEnemies || this.gameOver) return null;
+  // near가 있으면 그 지점 주변(무리 생성), 없으면 화면 주변 550px 범위에서 무작위로 자리를 찾는다.
+  spawnEnemy(kind: EnemyKind, view: Box, near?: Point): Enemy | null {
+    if (this.enemies.length >= stageAt(this.time).max || this.gameOver) return null;
     const { width, height } = ENEMY_STATS[kind];
-    const area = expand(view, 550);
+    const spread = SPAWN_PATTERNS.zealotGroup.spread;
+    const area = near ? { x: near.x - spread, y: near.y - spread, width: spread * 2, height: spread * 2 } : expand(view, 550);
     const left = Math.max(CFG.world.x, area.x);
     const top = Math.max(CFG.world.y, area.y);
     const right = Math.min(CFG.world.x + CFG.world.width, area.x + area.width) - width;
@@ -152,15 +181,64 @@ export class Battle {
     if (right < left || bottom < top) return null;
     for (let attempt = 0; attempt < 120; attempt++) {
       const body = { x: left + this.random() * (right - left), y: top + this.random() * (bottom - top), width, height };
-      if (!contains(CFG.world, body) || overlaps(body, expand(view, CFG.spawnMargin))) continue;
-      if (this.obstacles.some((obstacle) => overlaps(body, obstacle))) continue;
-      if ([...this.allies, ...this.enemies].some((actor) => actor.hp > 0 && overlaps(body, actor))) continue;
-      const enemy = createEnemy(this.nextId++, kind, body.x, body.y, this.time);
-      enemy.nextThinkAt += enemy.id % 5 * 50;
-      this.enemies.push(enemy);
-      return enemy;
+      if (this.canSpawnAt(body, view)) return this.addEnemy(kind, body);
     }
     return null;
+  }
+
+  // 화면 밖·월드 안·장애물 밖이며 살아 있는 몸체와 겹치지 않는 자리인지 확인한다.
+  private canSpawnAt(body: Box, view: Box): boolean {
+    return contains(CFG.world, body) && !overlaps(body, expand(view, CFG.spawnMargin))
+      && !this.obstacles.some((obstacle) => overlaps(body, obstacle))
+      && ![...this.allies, ...this.enemies].some((actor) => actor.hp > 0 && overlaps(body, actor));
+  }
+
+  private addEnemy(kind: EnemyKind, body: Box): Enemy {
+    const enemy = createEnemy(this.nextId++, kind, body.x, body.y, this.time, hpPercentAt(this.time));
+    enemy.nextThinkAt += enemy.id % 5 * 50;
+    this.enemies.push(enemy);
+    return enemy;
+  }
+
+  // 포위 웨이브: 화면 중심에서 같은 각도 간격으로 뻗은 방향마다, 화면 밖 여유 거리 바로 바깥에 놓는다.
+  // 장애물이나 월드 경계에 막히면 같은 방향으로 20px씩 최대 10번 더 밀어 보고, 자리가 없으면 그 방향은 건너뛴다.
+  private spawnRing(view: Box): void {
+    const { kind, count } = SPAWN_PATTERNS.ring;
+    const { width, height } = ENEMY_STATS[kind];
+    const origin = center(view);
+    const halfX = view.width / 2 + CFG.spawnMargin + width / 2 + 1;
+    const halfY = view.height / 2 + CFG.spawnMargin + height / 2 + 1;
+    for (let i = 0; i < count; i++) {
+      if (this.enemies.length >= stageAt(this.time).max) return;
+      const angle = i / count * Math.PI * 2;
+      const dx = Math.cos(angle), dy = Math.sin(angle);
+      const reach = Math.min(Math.abs(dx) > 1e-9 ? halfX / Math.abs(dx) : Infinity, Math.abs(dy) > 1e-9 ? halfY / Math.abs(dy) : Infinity);
+      for (let push = 0; push <= 10; push++) {
+        const distance = reach + push * 20;
+        const body = { x: origin.x + dx * distance - width / 2, y: origin.y + dy * distance - height / 2, width, height };
+        if (this.canSpawnAt(body, view)) { this.addEnemy(kind, body); break; }
+      }
+    }
+  }
+
+  // 시간 단계별 일반 생성과 광신도 무리·포위 웨이브를 처리한다.
+  private spawnWaves(view: Box): void {
+    const stage = stageAt(this.time);
+    if (this.time >= this.nextSpawnAt) {
+      for (let i = 0; i < stage.count; i++) this.spawnEnemy(pickSpawnKind(this.time, this.random), view);
+      this.nextSpawnAt = this.time + stage.everyMs;
+    }
+    const group = SPAWN_PATTERNS.zealotGroup;
+    if (this.time >= this.nextGroupAt) {
+      this.nextGroupAt += group.everyMs;
+      const leader = this.spawnEnemy('zealot', view);
+      for (let i = 1; leader && i < group.count; i++) this.spawnEnemy('zealot', view, center(leader));
+    }
+    const rings = SPAWN_PATTERNS.ring.at;
+    if (this.ringIndex < rings.length && this.time >= rings[this.ringIndex]) {
+      this.ringIndex++;
+      this.spawnRing(view);
+    }
   }
 
   dealDamage(target: Actor, damage: number): boolean {
@@ -254,9 +332,8 @@ export class Battle {
       speed: this.stats.speed * (1 + scale), attackMs: this.stats.attackMs * (1 - scale) };
   }
 
-  private fire(owner: Actor, target: Actor, team: Projectile['team'], damage: number, color: number, offsetRad = 0): void {
+  private fire(owner: Actor, target: Actor, team: Projectile['team'], damage: number, color: number, speed: number, offsetRad = 0): void {
     const config = team === 'ally' ? CFG.playerShot : CFG.enemyShot;
-    const speed = team === 'ally' ? this.stats.shotSpeed : config.speed;
     const from = center(owner), to = center(target);
     const length = Math.hypot(to.x - from.x, to.y - from.y) || 1;
     const direction = rotate((to.x - from.x) / length, (to.y - from.y) / length, offsetRad);
@@ -270,7 +347,7 @@ export class Battle {
     const count = this.skills.shots;
     const spread = count > 1 ? Math.min(SKILL.multiShot.spreadDeg, SKILL.multiShot.maxSpreadDeg / (count - 1)) : 0;
     for (let i = 0; i < count; i++) {
-      this.fire(this.player, target, 'ally', damage, CFG.playerShot.color, (i - (count - 1) / 2) * spread * Math.PI / 180);
+      this.fire(this.player, target, 'ally', damage, CFG.playerShot.color, this.stats.shotSpeed, (i - (count - 1) / 2) * spread * Math.PI / 180);
     }
   }
 
@@ -281,6 +358,18 @@ export class Battle {
     if (!wasAlive || enemy.hp > 0) return;
     this.kills++;
     if (!this.gameOver) this.player.hp = Math.min(this.player.maxHp, this.player.hp + this.skills.killHeal);
+  }
+
+  // 사제 회복: 자신을 제외하고 몸체가 반경 원에 닿은(경계 포함) 살아 있는 적을 최대 체력까지 회복한다. 장애물은 막지 않는다.
+  private healAround(priest: Enemy, radius: number, amount: number): void {
+    const origin = center(priest);
+    let healed = false;
+    for (const other of this.enemies) {
+      if (other === priest || other.hp <= 0 || other.hp >= other.maxHp || !circleTouches(origin, radius, other)) continue;
+      other.hp = Math.min(other.maxHp, other.hp + amount);
+      healed = true;
+    }
+    if (healed) this.addEffect('heal', origin, radius);
   }
 
   private addEffect(kind: AttackEffect['kind'], point: Point, radius: number): void {
@@ -358,9 +447,14 @@ export class Battle {
       if (!target) continue;
       this.moveEnemy(enemy, target, dt);
       const stats = ENEMY_STATS[enemy.kind];
-      if (stats.ranged) {
+      if (stats.heal) {
+        if (this.time >= enemy.nextAttackAt) {
+          this.healAround(enemy, stats.heal.radius, stats.heal.amount);
+          enemy.nextAttackAt = this.time + stats.attackMs;
+        }
+      } else if (stats.ranged) {
         if (distanceSquared(enemy, target) <= stats.range ** 2 && this.time >= enemy.nextAttackAt) {
-          this.fire(enemy, target, 'enemy', stats.damage, stats.color);
+          this.fire(enemy, target, 'enemy', stats.damage, stats.color, stats.shotSpeed ?? CFG.enemyShot.speed);
           enemy.nextAttackAt = this.time + stats.attackMs;
         }
       } else if (edgeDistance(enemy, target) <= 0.75
@@ -459,11 +553,7 @@ export class Battle {
       this.player.x = moved.x; this.player.y = moved.y;
     }
     const view = viewForPlayer(this.player);
-    if (this.spawning && this.time >= this.nextSpawnAt) {
-      const enemy = this.spawnEnemy(SPAWN_ORDER[this.spawnIndex % SPAWN_ORDER.length], view);
-      if (enemy) this.spawnIndex++;
-      this.nextSpawnAt = this.time + CFG.spawnMs;
-    }
+    if (this.spawning) this.spawnWaves(view);
     this.updateEnemies(dt);
     if (this.gameOver) return;
     if (this.time - this.lastPlayerAttackAt >= power.attackMs) {

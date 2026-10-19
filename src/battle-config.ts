@@ -1,4 +1,4 @@
-export type EnemyKind = 'soldier' | 'knight' | 'paladin' | 'archer' | 'mage';
+export type EnemyKind = 'soldier' | 'knight' | 'paladin' | 'archer' | 'mage' | 'zealot' | 'crossbowman' | 'priest';
 export type CharacterId = 'warlock' | 'deathKnight';
 
 export const BATTLE_CONFIG = {
@@ -8,9 +8,7 @@ export const BATTLE_CONFIG = {
   playerShot: { speed: 700, size: 8, lifeMs: 4000, color: 0xf5e6a8 },
   enemyShot: { speed: 280, size: 10, lifeMs: 6000 },
   expOrb: { size: 12, pullSpeed: 450, max: 300 },
-  spawnMs: 1800,
   spawnMargin: 96,
-  maxEnemies: 30,
   targetMs: 250,
   pathMs: 750,
   pathBudget: 4,
@@ -28,9 +26,14 @@ export interface EnemyStats {
   speed: number;
   range: number;
   attackMs: number;
+  // 사거리까지 접근한 뒤 멈추는 적. 원거리 적과 사제가 해당한다.
   ranged: boolean;
   color: number;
   exp: number;
+  // 원거리 적의 투사체 속도. 없으면 공통 적 투사체 속도를 쓴다.
+  shotSpeed?: number;
+  // 사제는 공격 대신 공격 간격마다 반경 안의 다른 적을 회복한다.
+  heal?: { radius: number; amount: number };
 }
 
 // 크기·사거리 1은 40px, 원거리 공격 간격은 초 단위다. 기사는 가로형, 성기사는 세로형 몸체를 쓴다.
@@ -40,7 +43,45 @@ export const ENEMY_STATS: Record<EnemyKind, EnemyStats> = {
   paladin: { name: '성기사', width: 80, height: 120, hp: 125, damage: 25, speed: 65, range: 40, attackMs: 0, ranged: false, color: 0xdfbe5d, exp: 4 },
   archer: { name: '궁사', width: 40, height: 40, hp: 10, damage: 5, speed: 110, range: 280, attackMs: 5000, ranged: true, color: 0xa7c26b, exp: 1 },
   mage: { name: '마법사', width: 40, height: 40, hp: 15, damage: 10, speed: 90, range: 200, attackMs: 10000, ranged: true, color: 0xbc83d6, exp: 2 },
+  zealot: { name: '광신도', width: 30, height: 30, hp: 12, damage: 6, speed: 160, range: 40, attackMs: 0, ranged: false, color: 0xe08a3c, exp: 0.5 },
+  crossbowman: { name: '석궁병', width: 40, height: 40, hp: 20, damage: 15, speed: 130, range: 320, attackMs: 6000, ranged: true, color: 0x4fb8b0, exp: 2,
+    shotSpeed: 500 },
+  priest: { name: '사제', width: 40, height: 40, hp: 30, damage: 0, speed: 85, range: 240, attackMs: 3000, ranged: true, color: 0xe58fb8, exp: 2.5,
+    heal: { radius: 160, amount: 10 } },
 };
+
+export interface SpawnStage {
+  // 이 단계가 시작되는 게임 시간(ms). 일시정지 시간은 게임 시간에 포함되지 않는다.
+  at: number;
+  everyMs: number;
+  count: number;
+  max: number;
+  // 이 단계에서 새로 일반 생성 후보에 추가되는 종류.
+  adds: readonly EnemyKind[];
+}
+
+// 시간에 따른 생성 증가. 단계 경계 시점부터 다음 단계 값을 적용한다.
+export const SPAWN_STAGES: readonly SpawnStage[] = [
+  { at: 0, everyMs: 1000, count: 1, max: 30, adds: ['soldier', 'archer'] },
+  { at: 60_000, everyMs: 900, count: 1, max: 40, adds: ['knight', 'mage'] },
+  { at: 120_000, everyMs: 1200, count: 2, max: 50, adds: ['paladin'] },
+  { at: 240_000, everyMs: 1000, count: 2, max: 60, adds: ['crossbowman'] },
+  { at: 360_000, everyMs: 800, count: 3, max: 70, adds: ['priest'] },
+  { at: 480_000, everyMs: 700, count: 3, max: 80, adds: [] },
+  { at: 600_000, everyMs: 600, count: 4, max: 90, adds: [] },
+];
+
+// 일반 생성에서 종류를 고르는 가중치. 광신도는 무리 패턴으로만 등장한다.
+export const SPAWN_WEIGHTS: Partial<Record<EnemyKind, number>> = {
+  soldier: 4, archer: 2, knight: 2, mage: 2, paladin: 1, crossbowman: 2, priest: 1,
+};
+
+export const SPAWN_PATTERNS = {
+  // 10:00에는 +0%, 이후 1분마다 기본 체력의 10%씩 더한다. 생성 시점에 정하고 반올림한다.
+  hpGrowth: { from: 600_000, everyMs: 60_000, percent: 10 },
+  zealotGroup: { from: 120_000, everyMs: 30_000, count: 5, spread: 90 },
+  ring: { at: [180_000, 420_000], kind: 'soldier', count: 16 },
+} as const;
 
 export interface CharacterStats {
   name: string;
@@ -75,7 +116,3 @@ export const SKILL_CONFIG = {
   specialWeight: 0.1,
   effectMs: 150,
 } as const;
-
-export const SPAWN_ORDER: readonly EnemyKind[] = [
-  'soldier', 'archer', 'soldier', 'knight', 'mage', 'soldier', 'paladin', 'soldier', 'archer', 'mage',
-];
