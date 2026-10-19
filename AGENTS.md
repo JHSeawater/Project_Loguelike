@@ -17,14 +17,19 @@
 
 ## 분야별 개발 지침
 
-- 플레이어 관련 방침은 [docs/Player/AGENTS.md](docs/Player/AGENTS.md)를 참고한다.
+- 플레이어 공통 이동·자동 공격·피격 방침은 [docs/Player/AGENTS.md](docs/Player/AGENTS.md)를 참고한다.
+- 직업별 시작 능력치·패시브·특기와 보류 구상은 [docs/Classes/AGENTS.md](docs/Classes/AGENTS.md)를 참고한다.
 - 적의 생성·행동·전투 방침은 [docs/Enemy/AGENTS.md](docs/Enemy/AGENTS.md)를 참고한다.
-- 전투 시뮬레이션·충돌·투사체의 테스트는 [docs/Combat/AGENTS.md](docs/Combat/AGENTS.md)를 참고한다.
+- 경험치·레벨과 레벨업 보상은 [docs/Progression/AGENTS.md](docs/Progression/AGENTS.md)를 참고한다.
+- 전투 시뮬레이션·충돌·투사체의 공통 값과 테스트는 [docs/Combat/AGENTS.md](docs/Combat/AGENTS.md)를 참고한다.
 - UI 관련 방침은 [docs/ui/AGENTS.md](docs/ui/AGENTS.md)를 참고한다.
-- 경험치·레벨 설계는 [docs/Experience.md](docs/Experience.md)를 참고한다.
-- 레벨업 보상 설계와 보류 항목은 [docs/LevelUpReward.md](docs/LevelUpReward.md)를 참고한다.
-- 직업별 능력치·패시브·특기 설계와 보류 구상은 [docs/Classes.md](docs/Classes.md)를 참고한다.
-- 전투 초기 구현의 임시 수치와 결정 사항은 [docs/CombatImplementation.md](docs/CombatImplementation.md)를 참고한다.
+- 규칙과 수치가 정해진 경위는 [docs/Decisions.md](docs/Decisions.md)에 기록한다.
+
+## 문서 관리 규칙
+
+- 같은 규칙이나 수치는 한 분야 지침에만 쓰고, 다른 문서에서는 링크로 참조한다.
+- 코드의 수치나 동작을 바꾸면 그 값을 기록한 지침도 같은 작업에서 갱신한다.
+- 사용자가 결정한 설계 사항은 해당 분야 지침에 반영하고, 결정 경위는 `docs/Decisions.md`에 기록한다.
 
 ## 테스트 개발 규칙
 

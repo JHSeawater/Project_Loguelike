@@ -8,7 +8,7 @@ export const FONT = 'Malgun Gothic, sans-serif';
 export const INPUT_DELAY_MS = 300;
 
 const PLAYABLE: readonly CharacterId[] = ['warlock', 'deathKnight'];
-// 직업 설계의 보류 구상. 고를 수 없는 잠긴 카드로만 보여준다.
+// 직업 지침의 보류 구상. 고를 수 없는 잠긴 카드로만 보여준다.
 const PLANNED = ['네크로맨서', '드라큘라', '드루이드', '서큐버스'];
 
 const hex = (color: number): string => `#${color.toString(16).padStart(6, '0')}`;
