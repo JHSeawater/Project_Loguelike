@@ -226,12 +226,14 @@ test('live dungeon simulation keeps bodies out of obstacles and each other', () 
       assert.ok(dungeonObstacles.every((obstacle) => !overlaps(actor, obstacle)));
     }
     // 플레이어와 적은 몸체 전체로, 적끼리는 위쪽 통과 영역을 뺀 아래쪽으로 겹치지 않는다.
-    // 사거리 안에서 멈춘 원거리 적·사제는 다른 적이 지나갈 수 있으므로 적끼리 검사에서 뺀다.
+    // 사거리 안에서 멈춘 원거리 적·사제는 근접 적이 지나갈 수 있으므로 그 쌍만 검사에서 뺀다. 원거리 적·사제끼리는 검사한다.
+    const passable = (stopped, other) => stopped.holding && !ENEMY_STATS[other.kind].ranged;
     for (let i = 0; i < battle.enemies.length; i++) {
       assert.ok(!overlaps(battle.player, battle.enemies[i]));
       for (let j = i + 1; j < battle.enemies.length; j++) {
-        if (battle.enemies[i].holding || battle.enemies[j].holding) continue;
-        assert.ok(!overlaps(footprint(battle.enemies[i]), footprint(battle.enemies[j])));
+        const [a, b] = [battle.enemies[i], battle.enemies[j]];
+        if (passable(a, b) || passable(b, a)) continue;
+        assert.ok(!overlaps(footprint(a), footprint(b)));
       }
     }
   }
@@ -257,6 +259,25 @@ test('an enemy can step behind another enemy only as far as its 25% top pass are
   }
   // 앞 병사 쪽에서도 같다. 뒤 병사의 위쪽 10px까지만 겹칠 수 있고, 플레이어 몸체와는 겹치지 않는다.
   assert.ok(!overlaps(back, battle.player) && !overlaps(front, battle.player));
+});
+
+test('ranged enemies and priests do not walk into a ranged enemy that has stopped within its range', () => {
+  // 앞 궁사(1745,1480)는 사거리 안에서 멈춰 있다. 정확히 같은 줄 뒤에서 오는 궁사·사제는 사거리 밖이라 움직이며, 앞 궁사에 막혀 옆으로 비킨다.
+  // 정면으로 막히는 가장 나쁜 경우라 비켜 서는 데 몇 초 걸린다(현재 궁사 약 3.4초, 사제 약 4.6초). 5초 안에 자기 사거리 안에서 멈춰야 한다.
+  for (const kind of ['archer', 'priest']) {
+    const battle = new Battle([], { spawning: false });
+    battle.player.hp = battle.player.maxHp = 10000;
+    const front = createEnemy(100, 'archer', 1745, 1480);
+    const back = createEnemy(101, kind, 1800, 1480);
+    for (const enemy of [front, back]) enemy.hp = enemy.maxHp = 10000;
+    battle.enemies.push(front, back);
+    for (let t = 0; t < 5000; t += 20) {
+      tick(battle, 20);
+      assert.ok(front.holding, kind);
+      assert.ok(!overlaps(footprint(back), footprint(front)), `${kind} at ${t}ms`);
+    }
+    assert.ok(back.holding, kind);
+  }
 });
 
 test('enemies walk straight through a ranged enemy that has stopped within its range', () => {

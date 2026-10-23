@@ -78,9 +78,9 @@ export const REWARDS: Record<RewardId, RewardDef> = {
   barrier: { name: '성스러운 방벽', effect: `최대 체력의 ${BOSS_REWARD.barrierPercent}%를 막는 배리어\n`
     + `${BOSS_REWARD.barrierRegenMs / 1000}초간 피해가 없으면 재생`, maxStacks: 1, boss: true },
   restore: { name: '완전 회복', effect: `최대 체력 +${BOSS_REWARD.restoreMaxHp}\n체력 모두 회복`, maxStacks: 1, boss: true },
-  blessHp: { name: '강인한 적', effect: `이후 나오는 적의\n체력 +${BLESS.percent}%`, maxStacks: Infinity, blessing: true },
-  blessSpeed: { name: '날랜 적', effect: `모든 적의\n이동속도 +${BLESS.percent}%`, maxStacks: Infinity, blessing: true },
-  blessDamage: { name: '흉포한 적', effect: `모든 적의\n공격력 +${BLESS.percent}%`, maxStacks: Infinity, blessing: true },
+  blessHp: { name: '신앙심', effect: `이후 나오는 적의\n체력 +${BLESS.percent}%`, maxStacks: Infinity, blessing: true },
+  blessSpeed: { name: '인도', effect: `모든 적의\n이동속도 +${BLESS.percent}%`, maxStacks: Infinity, blessing: true },
+  blessDamage: { name: '정화', effect: `모든 적의\n공격력 +${BLESS.percent}%`, maxStacks: Infinity, blessing: true },
 };
 
 // 모든 직업에 공통인 보상. 직업 특기는 SKILL_IDS에 따로 둔다.

@@ -192,7 +192,7 @@ export class Battle {
     return 100 + this.rewardStacks[id] * BLESS.percent;
   }
 
-  // 가호 '흉포한 적'을 적용한 적의 피해. 정수로 반올림한다.
+  // 가호 '정화'을 적용한 적의 피해. 정수로 반올림한다.
   private enemyDamage(base: number): number {
     return Math.round(base * this.blessPercent('blessDamage') / 100);
   }
@@ -272,7 +272,7 @@ export class Battle {
       && ![...this.allies, ...this.enemies].some((actor) => actor.hp > 0 && overlaps(body, actor));
   }
 
-  // 시간에 따른 체력 증가와 가호 '강인한 적'을 더한 체력으로 만든다. 이미 있는 적의 체력은 바꾸지 않는다.
+  // 시간에 따른 체력 증가와 가호 '신앙심'을 더한 체력으로 만든다. 이미 있는 적의 체력은 바꾸지 않는다.
   private addEnemy(kind: EnemyKind, body: Box): Enemy {
     const hpPercent = hpPercentAt(this.time) + this.blessPercent('blessHp') - 100;
     const enemy = createEnemy(this.nextId++, kind, body.x, body.y, this.time, hpPercent);
@@ -597,16 +597,17 @@ export class Battle {
     const dx = waypoint.x - from.x, dy = waypoint.y - from.y;
     const length = Math.hypot(dx, dy);
     if (length < 0.001) return;
-    // 가호 '날랜 적'은 이미 있는 적에게도 바로 적용된다.
+    // 가호 '인도'은 이미 있는 적에게도 바로 적용된다.
     const distance = Math.min(length, stats.speed * this.blessPercent('blessSpeed') / 100 * dt / 1000);
     // 적끼리는 서로 몸체 위쪽 통과 영역을 뺀 아래쪽끼리만 막는다. 다른 적의 막는 범위를 그 적의 통과 영역만큼
     // 위에서, 이 적의 통과 영역만큼 아래에서 줄이면 두 아래쪽 몸체가 겹칠 때만 부딪힌다.
-    // 사거리 안에서 멈춘 원거리 적·사제는 막지 않아, 그 뒤의 적이 줄을 지나 다가갈 수 있다.
+    // 사거리 안에서 멈춘 원거리 적·사제는 근접 적을 막지 않아, 그 뒤의 근접 적이 줄을 지나 다가갈 수 있다.
+    // 원거리 적·사제끼리는 멈춰 있어도 막아, 같은 자리에 겹쳐 서지 않고 옆으로 비켜 선다.
     // 매 이동마다 상자를 새로 만들지 않도록 재사용한다.
     const lift = enemy.height * CFG.enemyPassTop;
     let count = 0;
     for (const other of this.enemies) {
-      if (other === enemy || other.hp <= 0 || other.holding) continue;
+      if (other === enemy || other.hp <= 0 || (other.holding && !stats.ranged)) continue;
       const inset = other.height * CFG.enemyPassTop;
       const box = this.enemyBlockers[count++] ??= { x: 0, y: 0, width: 0, height: 0 };
       box.x = other.x; box.y = other.y + inset; box.width = other.width; box.height = other.height - inset - lift;
