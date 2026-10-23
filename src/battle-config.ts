@@ -65,8 +65,10 @@ export const SPAWN_STAGES: readonly SpawnStage[] = [
   { at: 0, everyMs: 1000, count: 1, max: 30, adds: ['soldier', 'archer'] },
   { at: 60_000, everyMs: 900, count: 1, max: 40, adds: ['knight', 'mage'] },
   { at: 120_000, everyMs: 1200, count: 2, max: 50, adds: ['paladin'] },
-  { at: 240_000, everyMs: 1000, count: 2, max: 60, adds: ['crossbowman'] },
-  { at: 360_000, everyMs: 800, count: 3, max: 70, adds: ['priest'] },
+  // 3:00은 석궁병만 추가한다. 생성 주기와 최대 수는 2:00 단계와 같다.
+  { at: 180_000, everyMs: 1200, count: 2, max: 50, adds: ['crossbowman'] },
+  { at: 240_000, everyMs: 1000, count: 2, max: 60, adds: ['priest'] },
+  { at: 360_000, everyMs: 800, count: 3, max: 70, adds: [] },
   { at: 480_000, everyMs: 700, count: 3, max: 80, adds: [] },
   { at: 600_000, everyMs: 600, count: 4, max: 90, adds: [] },
 ];
@@ -80,7 +82,7 @@ export const SPAWN_PATTERNS = {
   // 10:00에는 +0%, 이후 1분마다 기본 체력의 10%씩 더한다. 생성 시점에 정하고 반올림한다.
   hpGrowth: { from: 600_000, everyMs: 60_000, percent: 10 },
   zealotGroup: { from: 120_000, everyMs: 30_000, count: 5, spread: 90 },
-  ring: { at: [180_000, 420_000], kind: 'soldier', count: 16 },
+  ring: { from: 150_000, everyMs: 150_000, kind: 'soldier', count: 16 },
 } as const;
 
 export interface CharacterStats {

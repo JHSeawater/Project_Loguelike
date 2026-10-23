@@ -151,7 +151,7 @@ export class Battle {
   private nextId = 1;
   private nextSpawnAt = 0;
   private nextGroupAt: number = SPAWN_PATTERNS.zealotGroup.from;
-  private ringIndex = 0;
+  private nextRingAt: number = SPAWN_PATTERNS.ring.from;
   private lastPlayerAttackAt = -Infinity;
   private pathBudget = 0;
   // 현재 단계가 시작된 게임 시간. 주기 동작이 이번 단계 안에서 준비됐는지 판단한다.
@@ -240,9 +240,8 @@ export class Battle {
       const leader = this.spawnEnemy('zealot', view);
       for (let i = 1; leader && i < group.count; i++) this.spawnEnemy('zealot', view, center(leader));
     }
-    const rings = SPAWN_PATTERNS.ring.at;
-    if (this.ringIndex < rings.length && this.time >= rings[this.ringIndex]) {
-      this.ringIndex++;
+    if (this.time >= this.nextRingAt) {
+      this.nextRingAt += SPAWN_PATTERNS.ring.everyMs;
       this.spawnRing(view);
     }
   }

@@ -22,7 +22,7 @@ const quietBattle = (options = {}) => {
 const only = (battle, keep) => {
   if (keep !== 'regular') battle['nextSpawnAt'] = Infinity;
   if (keep !== 'group') battle['nextGroupAt'] = Infinity;
-  if (keep !== 'ring') battle['ringIndex'] = Infinity;
+  if (keep !== 'ring') battle['nextRingAt'] = Infinity;
   return battle;
 };
 const legalSpawn = (battle, enemy, view = VIEW) => {
@@ -34,8 +34,8 @@ const legalSpawn = (battle, enemy, view = VIEW) => {
 
 test('spawn stages switch exactly at their boundaries with the documented values', () => {
   const table = [
-    [0, 1000, 1, 30], [60_000, 900, 1, 40], [120_000, 1200, 2, 50], [240_000, 1000, 2, 60],
-    [360_000, 800, 3, 70], [480_000, 700, 3, 80], [600_000, 600, 4, 90],
+    [0, 1000, 1, 30], [60_000, 900, 1, 40], [120_000, 1200, 2, 50], [180_000, 1200, 2, 50],
+    [240_000, 1000, 2, 60], [360_000, 800, 3, 70], [480_000, 700, 3, 80], [600_000, 600, 4, 90],
   ];
   const values = (stage) => [stage.at, stage.everyMs, stage.count, stage.max];
   table.forEach((row, i) => {
@@ -43,7 +43,7 @@ test('spawn stages switch exactly at their boundaries with the documented values
     assert.deepEqual(values(stageAt(row[0] + 50)), row, `after ${row[0]}`);
     if (i > 0) assert.deepEqual(values(stageAt(row[0] - 50)), table[i - 1], `before ${row[0]}`);
   });
-  assert.deepEqual(values(stageAt(3_600_000)), table[6]);
+  assert.deepEqual(values(stageAt(3_600_000)), table.at(-1));
 });
 
 test('spawn kinds unlock by stage, follow the weights, and never include zealots', () => {
@@ -57,13 +57,13 @@ test('spawn kinds unlock by stage, follow the weights, and never include zealots
   assert.deepEqual(kindsAt(59_999), new Set(['soldier', 'archer']));
   assert.deepEqual(kindsAt(119_999), new Set(['soldier', 'archer', 'knight', 'mage']));
   assert.deepEqual(kindsAt(120_000), new Set(['soldier', 'archer', 'knight', 'mage', 'paladin']));
-  assert.ok(!kindsAt(239_999).has('crossbowman'));
-  assert.ok(kindsAt(240_000).has('crossbowman'));
-  assert.ok(!kindsAt(359_999).has('priest'));
-  assert.deepEqual(kindsAt(360_000), new Set(['soldier', 'archer', 'knight', 'mage', 'paladin', 'crossbowman', 'priest']));
+  assert.ok(!kindsAt(179_999).has('crossbowman'));
+  assert.ok(kindsAt(180_000).has('crossbowman'));
+  assert.ok(!kindsAt(239_999).has('priest'));
+  assert.deepEqual(kindsAt(240_000), new Set(['soldier', 'archer', 'knight', 'mage', 'paladin', 'crossbowman', 'priest']));
   assert.ok(!kindsAt(3_600_000).has('zealot'));
   // 난수가 1에 가까워도 범위를 벗어나지 않는다.
-  assert.equal(pickSpawnKind(360_000, () => 0.9999999999), 'priest');
+  assert.equal(pickSpawnKind(240_000, () => 0.9999999999), 'priest');
 });
 
 test('regular spawns follow the stage interval and count across a boundary', () => {
@@ -133,10 +133,12 @@ test('zealot groups keep every spawn rule on the real map', () => {
   }
 });
 
-test('encircling waves place 16 soldiers around the view at 3:00 and 7:00, once each', () => {
+test('encircling waves place 16 soldiers around the view from 2:30 and every 2:30 after', () => {
   const battle = only(quietBattle(), 'ring');
-  battle['ringIndex'] = 0;
-  battle.time = 179_980;
+  battle['nextRingAt'] = 150_000;
+  battle.time = 149_960;
+  step(battle, 20);
+  assert.equal(battle.enemies.length, 0);
   step(battle, 20);
   assert.equal(battle.enemies.length, 16);
   assert.ok(battle.enemies.every((enemy) => enemy.kind === 'soldier'));
@@ -153,25 +155,32 @@ test('encircling waves place 16 soldiers around the view at 3:00 and 7:00, once 
     assert.ok(gap > 0 && gap < 2, `gap ${gap}`);
   }
   assert.deepEqual(quadrants, [4, 4, 4, 4]);
+  // 다음 웨이브는 5:00, 그다음은 7:30이다. 그 사이에는 다시 나오지 않는다.
   step(battle, 10_000);
   assert.equal(battle.enemies.length, 16);
-  battle.time = 419_980;
-  step(battle, 20);
-  assert.ok(battle.enemies.length > 16);
+  for (const due of [300_000, 450_000]) {
+    // 앞 웨이브의 적을 치워 같은 자리에 다시 놓을 수 있게 한다.
+    battle.enemies = [];
+    battle.time = due - 40;
+    step(battle, 20);
+    assert.equal(battle.enemies.length, 0, `before ${due}`);
+    step(battle, 20);
+    assert.equal(battle.enemies.length, 16, `at ${due}`);
+  }
 });
 
 test('encircling waves skip blocked directions at the world corner and on the real map', () => {
   const corner = { x: 0, y: 0, width: 1280, height: 720 };
   const battle = only(new Battle([], { random: seeded(3) }), 'ring');
   battle.player.attackable = false;
-  battle['ringIndex'] = 0;
-  battle.time = 179_980;
+  battle['nextRingAt'] = 150_000;
+  battle.time = 149_980;
   battle.update(20, { x: 0, y: 0 }, () => corner);
   assert.ok(battle.enemies.length > 0 && battle.enemies.length < 16);
   for (const enemy of battle.enemies) legalSpawn(battle, enemy, corner);
   const mapped = only(quietBattle({ obstacles: dungeonObstacles }), 'ring');
-  mapped['ringIndex'] = 0;
-  mapped.time = 179_980;
+  mapped['nextRingAt'] = 150_000;
+  mapped.time = 149_980;
   step(mapped, 20);
   for (const enemy of mapped.enemies) legalSpawn(mapped, enemy);
 });
