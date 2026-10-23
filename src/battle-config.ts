@@ -136,9 +136,9 @@ export const SKILL_CONFIG = {
   surge: { durationMs: 5000, percent: 20 },
   multiShot: { spreadDeg: 10, maxSpreadDeg: 60 },
   explosion: { radiusStep: 20, damagePercent: 50 },
-  homing: { turnDegPerSec: 270 },
-  // 마력 조정: 마력 폭주의 지속 시간과 능력치 변화량에 곱한다.
-  surgeTuning: { multiplier: 2 },
+  homing: { turnDegPerSec: 135 },
+  // 마력 조정: 마력 폭주의 지속 시간과 능력치 변화량에 각각 곱한다.
+  surgeTuning: { durationMultiplier: 3, percentMultiplier: 2 },
   swingRange: { radiusStep: 15 },
   bloodThirst: { healStep: 1 },
   // 피의 광란: 처치 뒤 다음 1회 휘두르기의 공격력에 곱한다.

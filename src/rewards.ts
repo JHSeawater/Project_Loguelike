@@ -62,7 +62,8 @@ export const REWARDS: Record<RewardId, RewardDef> = {
     maxStacks: Infinity, character: 'warlock', tier: 'rare' },
   homing: { name: '추적 마탄', effect: '투사체가 가까운 적을\n향해 방향을 바꾼다', maxStacks: 1, character: 'warlock', special: true,
     tier: 'epic' },
-  surgeTuning: { name: '마력 조정', effect: `마력 폭주의 지속 시간과\n능력치 변화량 ${SKILL.surgeTuning.multiplier}배`,
+  surgeTuning: { name: '마력 조정', effect: `마력 폭주 지속 시간 ${SKILL.surgeTuning.durationMultiplier}배\n`
+    + `능력치 변화량 ${SKILL.surgeTuning.percentMultiplier}배`,
     maxStacks: 1, character: 'warlock', special: true, tier: 'epic' },
   swingRange: { name: '참격 확장', effect: `공격 반경 +${SKILL.swingRange.radiusStep}`, maxStacks: Infinity, character: 'deathKnight',
     tier: 'rare' },
@@ -172,14 +173,14 @@ export interface SkillStats {
 
 export function skillStatsFor(stacks: RewardStacks, character: CharacterId = 'warlock'): SkillStats {
   const base = CHARACTER_STATS[character];
-  const tuning = stacks.surgeTuning ? SKILL.surgeTuning.multiplier : 1;
+  const tuned = stacks.surgeTuning > 0;
   return {
     shots: 1 + stacks.multiShot,
     explosionRadius: stacks.explosion * SKILL.explosion.radiusStep,
     expPercent: 100 + stacks.soulHarvest * REWARD_STEP.expPercent,
     homing: stacks.homing > 0,
-    surgeMs: SKILL.surge.durationMs * tuning,
-    surgePercent: SKILL.surge.percent * tuning,
+    surgeMs: SKILL.surge.durationMs * (tuned ? SKILL.surgeTuning.durationMultiplier : 1),
+    surgePercent: SKILL.surge.percent * (tuned ? SKILL.surgeTuning.percentMultiplier : 1),
     swingRadius: base.swingRadius + stacks.swingRange * SKILL.swingRange.radiusStep,
     killHeal: base.killHeal + stacks.bloodThirst * SKILL.bloodThirst.healStep,
     frenzy: stacks.bloodFrenzy > 0,

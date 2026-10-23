@@ -102,17 +102,17 @@ test('surge boosts warlock damage, speed and attack rate for 5s after a choice, 
   assert.equal(knight.surgeUntil, -Infinity);
 });
 
-test('surge tuning doubles the surge duration and its stat changes, starting with the surge of the choice that grants it', () => {
+test('surge tuning triples the surge duration and doubles its stat changes, starting with the surge of the choice that grants it', () => {
   const battle = frozenBattle('warlock');
   const player = center(battle.player);
   battle.orbs.push(orbAt(1, player.x, player.y, 5));
   step(battle, 20);
   battle.choices = ['surgeTuning'];
   battle.choose(0);
-  // 10초 동안 공격력·이동속도 +40%, 공격 간격 −40%.
-  assert.equal(battle.surgeUntil, battle.time + 10_000);
+  // 지속 시간 3배(15초) 동안 공격력·이동속도 +40%, 공격 간격 −40%(변화량 2배).
+  assert.equal(battle.surgeUntil, battle.time + 15_000);
   assert.deepEqual([battle.currentStats().damage, battle.currentStats().speed, battle.currentStats().attackMs], [14, 350, 300]);
-  step(battle, 10_000 - 20);
+  step(battle, 15_000 - 20);
   assert.equal(battle.currentStats().damage, 14);
   step(battle, 20);
   assert.deepEqual([battle.currentStats().damage, battle.currentStats().speed, battle.currentStats().attackMs], [10, 250, 500]);
@@ -261,23 +261,26 @@ test('soul harvest multiplies experience exactly and carries the fraction to lat
   assert.equal(collect(3, [3, 3]), 7);
 });
 
-test('homing shots turn toward the nearest enemy at no more than 270° per second and keep their speed', () => {
+test('homing shots turn toward the nearest enemy at no more than 135° per second and keep their speed', () => {
   const battle = frozenBattle('warlock');
   battle.applyReward('homing');
   battle.projectiles.push({ id: 900, team: 'ally', x: 1496, y: 1496, width: 8, height: 8,
     vx: 700, vy: 0, damage: 10, color: 0, expiresAt: 4000, homing: true });
-  battle.enemies.push(tough(100, 'paladin', 1460, 1000));
+  // 초당 135°로 꺾는 700px/초 투사체의 최소 회전 반지름은 약 297px이다. 그 원 안의 적은 맞히지 못하고 맴돌므로,
+  // 원 밖이 되도록 900px 위에 둔다.
+  battle.enemies.push(tough(100, 'paladin', 1460, 600));
   step(battle, 20);
   const shot = battle.projectiles[0];
-  // 바로 위의 적을 향해 20ms 동안 최대 5.4°만 꺾는다.
-  assert.ok(Math.abs(degrees(shot) - -5.4) < 1e-9);
+  // 바로 위의 적을 향해 20ms 동안 최대 2.7°만 꺾는다.
+  assert.equal(SKILL.homing.turnDegPerSec, 135);
+  assert.ok(Math.abs(degrees(shot) - -2.7) < 1e-9);
   assert.ok(Math.abs(Math.hypot(shot.vx, shot.vy) - 700) < 1e-9);
   step(battle, 2000);
   assert.ok(battle.enemies[0].hp < 100000);
   const plain = frozenBattle('warlock');
   plain.projectiles.push({ id: 901, team: 'ally', x: 1496, y: 1496, width: 8, height: 8,
     vx: 700, vy: 0, damage: 10, color: 0, expiresAt: 4000 });
-  plain.enemies.push(tough(100, 'paladin', 1460, 1000));
+  plain.enemies.push(tough(100, 'paladin', 1460, 600));
   step(plain, 20);
   assert.equal(plain.projectiles[0].vy, 0);
   // 추적 마탄을 얻은 뒤 발사한 투사체에만 표시된다.
