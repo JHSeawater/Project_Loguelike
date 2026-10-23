@@ -36,6 +36,8 @@ export interface Projectile extends Box {
   color: number;
   // 추적 마탄을 얻은 뒤 발사한 플레이어 투사체만 가까운 적을 향해 방향을 바꾼다.
   homing?: boolean;
+  // 발사된 게임 시간. 단계 끝에 발사되므로 다음 단계부터 움직인다.
+  firedAt?: number;
 }
 
 // 휘두르기·폭발·사제 회복의 범위를 잠시 보여주기 위한 기록. 판정에는 쓰지 않는다.
@@ -154,6 +156,8 @@ export class Battle {
   private pathBudget = 0;
   // 현재 단계가 시작된 게임 시간. 주기 동작이 이번 단계 안에서 준비됐는지 판단한다.
   private stepStart = 0;
+  // 단계 시작 시점의 몸체 위치. 투사체는 몸체가 이 위치에서 지금 위치까지 움직인 것으로 보고 판정한다.
+  private readonly origins = new Map<Actor, Point>();
 
   constructor(obstacles: readonly Box[],
     options: { spawning?: boolean; random?: () => number; character?: CharacterId } = {}) {
@@ -348,7 +352,7 @@ export class Battle {
     const direction = rotate((to.x - from.x) / length, (to.y - from.y) / length, offsetRad);
     this.projectiles.push({ id: this.nextId++, team, x: from.x - config.size / 2, y: from.y - config.size / 2,
       width: config.size, height: config.size, vx: direction.x * speed, vy: direction.y * speed,
-      damage, expiresAt: this.time + config.lifeMs, color, homing: team === 'ally' && this.skills.homing });
+      damage, expiresAt: this.time + config.lifeMs, color, homing: team === 'ally' && this.skills.homing, firedAt: this.time });
   }
 
   // 다중 시전: 대상 방향을 중심으로 10°씩 벌린 부채꼴로 발사하고, 전체 폭이 60°를 넘으면 그 안에서 고르게 나눈다.
@@ -476,9 +480,11 @@ export class Battle {
   private updateProjectiles(dt: number): void {
     const active = this.projectiles;
     this.projectiles = [];
-    const stepStart = this.time - dt;
+    const stepStart = this.stepStart;
     for (const shot of active) {
       if (this.gameOver) break;
+      // 이번 단계 끝에 발사된 투사체는 다음 단계부터 움직이므로, 이동 거리가 속도 × 발사 후 경과 시간과 같다.
+      if (shot.firedAt === this.time) { this.projectiles.push(shot); continue; }
       // 단계 안에서도 남은 수명만큼만 이동·판정한다. 만료 시점에 정확히 닿으면 이미 소멸한 것으로 본다.
       const life = Math.min(dt, shot.expiresAt - stepStart);
       if (life <= 0) continue;
@@ -489,7 +495,13 @@ export class Battle {
       let hit: Actor | null = null, first = Infinity;
       for (const actor of candidates) {
         if (actor.hp <= 0 || !actor.attackable) continue;
-        const time = segmentHit(start, end, expand(actor, shot.width / 2));
+        // 몸체도 이번 단계 동안 시작 위치에서 지금 위치까지 일정하게 움직였다고 보고, 시작 위치의 몸체에 대한
+        // 투사체의 상대 경로로 판정한다. 단계 중간에만 겹쳐도 맞히고, 끝 위치에만 겹치는 경우는 맞히지 않는다.
+        const origin = this.origins.get(actor) ?? actor;
+        const share = life / dt;
+        const relative = { x: end.x - (actor.x - origin.x) * share, y: end.y - (actor.y - origin.y) * share };
+        const body = { x: origin.x, y: origin.y, width: actor.width, height: actor.height };
+        const time = segmentHit(start, relative, expand(body, shot.width / 2));
         if (time !== null && time < first && stepStart + time * life < shot.expiresAt) { hit = actor; first = time; }
       }
       if (hit && shot.team === 'ally') {
@@ -553,6 +565,9 @@ export class Battle {
     const power = this.currentStats();
     this.stepStart = this.time;
     this.time += dt;
+    this.origins.clear();
+    for (const actor of this.allies) this.origins.set(actor, { x: actor.x, y: actor.y });
+    for (const enemy of this.enemies) this.origins.set(enemy, { x: enemy.x, y: enemy.y });
     this.effects = this.effects.filter((effect) => this.time - effect.at < SKILL.effectMs);
     const length = Math.hypot(input.x, input.y);
     if (length) {
