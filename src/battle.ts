@@ -4,8 +4,8 @@ import { BATTLE_CONFIG as CFG, BOSS_CONFIG as BOSS, CHARACTER_STATS, ENEMY_STATS
 import { center, centerInView, contains, distanceSquared, edgeDistance, expand, overlaps, segmentHit, type Point } from './battle-geometry.ts';
 import { Navigation } from './navigation.ts';
 import { addExperience } from './experience.ts';
-import { BOSS_REWARD, REWARD_STEP, bossRewardPool, emptyStacks, maxHpFor, rewardPool, rollChoices, skillStatsFor, specialSkillOf,
-  statsFor, type PlayerStats, type RewardId, type SkillStats } from './rewards.ts';
+import { BOSS_REWARD, REWARD_STEP, bossRewardPool, emptyStacks, maxHpFor, missingSpecialSkills, rewardPool, rollChoices, skillStatsFor,
+  statsFor, type PlayerStats, type RewardId, type SkillId, type SkillStats } from './rewards.ts';
 
 export interface Actor extends Box {
   id: number;
@@ -163,6 +163,10 @@ export class Battle {
   // 선택지가 열려 있는 동안 전투 전체가 일시정지된다. 보스 보상 선택창은 레벨업 선택창보다 먼저 연다.
   choices: RewardId[] = [];
   choiceSource: 'level' | 'boss' = 'level';
+  // 보스 보상 '직업 특수 특기'로 얻을 특수 특기. 보스 보상 선택창을 열 때 아직 없는 것 중에서 무작위로 정한다.
+  bossSpecial: SkillId | null = null;
+  // 피의 광란: 처치한 뒤 다음 1회 휘두르기의 공격력이 커진다. 여러 번 처치해도 한 번만 쌓인다.
+  frenzyCharged = false;
   // 보스 보상 '성스러운 방벽'의 남은 배리어. 체력보다 먼저 피해를 막는다.
   barrier = 0;
   // 등장한 보스와 등장한 게임 시간. 처치된 뒤에도 남겨 두어 표시에서 처치 여부를 알 수 있다.
@@ -385,14 +389,24 @@ export class Battle {
     return true;
   }
 
+  // 적의 경험치만큼 같은 값의 구슬을 몸체 안에 격자로 고르게 놓는다. 몸체는 장애물과 겹치지 않으므로 구슬도 이동 가능 공간에 생긴다.
   private dropOrb(enemy: Enemy): void {
-    const value = ENEMY_STATS[enemy.kind].exp;
-    if (this.orbs.length >= CFG.expOrb.max) {
-      this.orbs[0].value += value;
-      return;
+    const { size, value } = CFG.expOrb;
+    const count = Math.round(ENEMY_STATS[enemy.kind].exp / value);
+    const cols = Math.ceil(Math.sqrt(count * enemy.width / enemy.height)), rows = Math.ceil(count / cols);
+    for (let i = 0; i < count; i++) {
+      // 상한을 넘으면 새 구슬 대신 가장 오래된 구슬에 값을 더해 총량을 보존한다.
+      if (this.orbs.length >= CFG.expOrb.max) {
+        this.orbs[0].value += value;
+        continue;
+      }
+      const cx = enemy.x + (i % cols + 0.5) * enemy.width / cols;
+      const cy = enemy.y + (Math.floor(i / cols) + 0.5) * enemy.height / rows;
+      // 구슬이 몸체 밖으로 나가지 않도록 중심을 안쪽으로 제한한다.
+      const x = Math.max(enemy.x, Math.min(cx - size / 2, enemy.x + enemy.width - size));
+      const y = Math.max(enemy.y, Math.min(cy - size / 2, enemy.y + enemy.height - size));
+      this.orbs.push({ id: this.nextId++, x, y, width: size, height: size, value, pulled: false });
     }
-    const { x, y } = center(enemy), size = CFG.expOrb.size;
-    this.orbs.push({ id: this.nextId++, x: x - size / 2, y: y - size / 2, width: size, height: size, value, pulled: false });
   }
 
   private updateOrbs(dt: number): void {
@@ -427,6 +441,8 @@ export class Battle {
     if (this.pendingBossRewards > 0) {
       this.choiceSource = 'boss';
       this.choices = rollChoices(this.rewardStacks, BOSS_REWARD.choices, this.random, bossRewardPool(this.rewardStacks, this.character));
+      const missing = missingSpecialSkills(this.rewardStacks, this.character);
+      this.bossSpecial = this.choices.includes('bossSkill') ? missing[Math.min(missing.length - 1, Math.floor(this.random() * missing.length))] : null;
     } else if (this.pendingLevelUps > 0) {
       this.choiceSource = 'level';
       this.choices = rollChoices(this.rewardStacks, this.stats.choiceCount, this.random, rewardPool(this.character));
@@ -437,21 +453,25 @@ export class Battle {
     if (this.gameOver || !Number.isInteger(index) || index < 0 || index >= this.choices.length) return false;
     const id = this.choices[index];
     this.choices = [];
-    if (this.choiceSource === 'boss') this.pendingBossRewards--;
-    else {
-      this.pendingLevelUps--;
-      // 마력 폭주: 레벨업 보상을 고른 시점부터 지속 시간을 다시 센다. 연속 레벨업에서도 누적하지 않는다.
-      if (this.character === 'warlock') this.surgeUntil = this.time + SKILL.surge.durationMs;
-    }
+    const levelUp = this.choiceSource === 'level';
+    if (levelUp) this.pendingLevelUps--;
+    else this.pendingBossRewards--;
     this.applyReward(id);
+    // 마력 폭주: 레벨업 보상을 고른 시점부터 지속 시간을 다시 센다. 연속 레벨업에서도 누적하지 않는다.
+    // 보상을 적용한 뒤에 정하므로 마력 조정을 고른 순간의 폭주부터 늘어난 지속 시간을 쓴다.
+    if (levelUp && this.character === 'warlock') this.surgeUntil = this.time + this.skills.surgeMs;
     this.openNextChoices();
     return true;
   }
 
   applyReward(id: RewardId): void {
     this.rewardStacks[id]++;
-    // '직업 특수 특기'는 그 직업의 특수 특기를 얻는 것과 같다.
-    if (id === 'bossSkill') this.rewardStacks[specialSkillOf(this.character)]++;
+    // '직업 특수 특기'는 선택창에서 정한 특수 특기를 얻는 것과 같다. 정하지 않았으면 아직 없는 첫 특수 특기를 얻는다.
+    if (id === 'bossSkill') {
+      const special = this.bossSpecial ?? missingSpecialSkills(this.rewardStacks, this.character)[0];
+      if (special) this.rewardStacks[special]++;
+      this.bossSpecial = null;
+    }
     // 최대 체력이 늘어난 만큼 현재 체력도 늘린다. 최대 체력 강화와 죽음의 군주가 함께 쓴다.
     const maxHp = maxHpFor(this.rewardStacks, this.character);
     this.player.hp += maxHp - this.player.maxHp;
@@ -470,7 +490,7 @@ export class Battle {
   // 마력 폭주 중에는 공격력·이동속도가 늘고 공격 간격이 줄어든다. 나머지 능력치는 그대로다.
   currentStats(): PlayerStats {
     if (this.time >= this.surgeUntil) return this.stats;
-    const scale = SKILL.surge.percent / 100;
+    const scale = this.skills.surgePercent / 100;
     return { ...this.stats, damage: Math.round(this.stats.damage * (1 + scale)),
       speed: this.stats.speed * (1 + scale), attackMs: this.stats.attackMs * (1 - scale) };
   }
@@ -501,6 +521,7 @@ export class Battle {
     if (!wasAlive || enemy.hp > 0) return;
     this.kills++;
     if (!this.gameOver) this.player.hp = Math.min(this.player.maxHp, this.player.hp + this.skills.killHeal);
+    if (this.skills.frenzy) this.frenzyCharged = true;
   }
 
   // 사제 회복: 자신을 제외하고 몸체가 반경 원에 닿은(경계 포함) 살아 있는 적을 최대 체력까지 회복한다. 장애물은 막지 않는다.
@@ -525,7 +546,10 @@ export class Battle {
     const targets = this.enemies.filter((enemy) => enemy.hp > 0 && enemy.attackable && circleTouches(origin, radius, enemy)
       && !this.obstacles.some((obstacle) => segmentHit(origin, center(enemy), obstacle) !== null));
     if (!targets.length) return false;
-    for (const enemy of targets) this.strike(enemy, damage);
+    // 피의 광란으로 쌓인 강화는 이번 휘두르기 전체에 쓰고 사라진다. 이번 휘두르기로 처치하면 다음 휘두르기에 다시 쌓인다.
+    const power = this.frenzyCharged ? damage * SKILL.bloodFrenzy.damageMultiplier : damage;
+    this.frenzyCharged = false;
+    for (const enemy of targets) this.strike(enemy, power);
     this.addEffect('swing', origin, radius);
     return true;
   }

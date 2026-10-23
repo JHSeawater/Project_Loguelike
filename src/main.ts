@@ -5,7 +5,7 @@ import { getFootDepth } from './render-depth';
 import { Battle, crossArms } from './battle';
 import { BATTLE_CONFIG, BOSS_CONFIG, CHARACTER_STATS, ENEMY_STATS, SKILL_CONFIG, type CharacterId } from './battle-config';
 import { experienceToNextLevel } from './experience';
-import { REWARDS, specialSkillOf, type RewardDef, type RewardId } from './rewards';
+import { REWARDS, type RewardDef, type RewardId } from './rewards';
 import { CharacterSelectScene, FONT, INPUT_DELAY_MS, TitleScene } from './menu-scenes';
 import './style.css';
 
@@ -159,7 +159,7 @@ class GameScene extends Phaser.Scene {
     const battle = this.battle;
     this.player.setDepth(getFootDepth(battle.player));
     const hurtAge = battle.time - battle.player.lastHitAt;
-    this.player.setAlpha(hurtAge < 3000 && !battle.gameOver && Math.floor(hurtAge / 120) % 2 === 0 ? 0.35 : 1);
+    this.player.setAlpha(hurtAge < BATTLE_CONFIG.player.hurtMs && !battle.gameOver && Math.floor(hurtAge / 120) % 2 === 0 ? 0.35 : 1);
     const liveEnemies = new Set<number>();
     for (const enemy of battle.enemies) {
       liveEnemies.add(enemy.id);
@@ -305,9 +305,9 @@ class GameScene extends Phaser.Scene {
     }).setOrigin(0.5), 25001);
     const total = choices.length * CHOICE_CARD.width + (choices.length - 1) * CHOICE_CARD.gap;
     choices.forEach((id, index) => {
-      // '직업 특수 특기'는 실제로 얻게 될 그 직업의 특수 특기를 보여 준다.
-      const special = REWARDS[specialSkillOf(this.battle.character)];
-      const reward = id === 'bossSkill' ? { ...REWARDS[id], effect: `${special.name} 획득\n${special.effect}` } : REWARDS[id];
+      // '직업 특수 특기'는 선택창을 열 때 정한, 실제로 얻게 될 특수 특기를 보여 준다.
+      const special = id === 'bossSkill' && this.battle.bossSpecial ? REWARDS[this.battle.bossSpecial] : null;
+      const reward = special ? { ...REWARDS[id], effect: `${special.name} 획득\n${special.effect}` } : REWARDS[id];
       const x = 640 - total / 2 + index * (CHOICE_CARD.width + CHOICE_CARD.gap) + CHOICE_CARD.width / 2;
       const y = CHOICE_CARD.top + CHOICE_CARD.height / 2;
       const stroke = cardStroke(reward);
@@ -320,7 +320,7 @@ class GameScene extends Phaser.Scene {
       const stacks = this.battle.rewardStacks[id];
       const stackText = reward.boss ? '보스 보상' : reward.special ? '특수 특기 · 1회 획득'
         : Number.isFinite(reward.maxStacks) ? `중첩 ${stacks}/${reward.maxStacks}`
-        : reward.character ? `직업 특기 · 중첩 ${stacks}` : '중첩 제한 없음';
+        : reward.character ? `직업 특기 · 중첩 ${stacks}` : id === 'heal' ? '중첩 제한 없음' : `중첩 ${stacks} · 제한 없음`;
       const lines: [number, string, string, string][] = [
         [-95, `[${index + 1}]`, '18px', '#9fd0ff'],
         [-50, reward.name, '21px', '#eeeece'],

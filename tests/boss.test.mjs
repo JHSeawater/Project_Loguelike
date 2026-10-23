@@ -99,13 +99,14 @@ test('the judgment brand hits a body touching the 100px circle once, exactly whe
   };
   // 낙인을 시전한 순간의 플레이어 중심에 원이 생긴다. 그대로 있으면 경고가 끝나는 1.0초에 35 피해다.
   const stay = brand();
-  assert.deepEqual([stay.before, stay.after], [140, 105]);
+  assert.deepEqual([stay.before, stay.after], [160, 125]);
   assert.deepEqual(stay.battle.hazards, []);
   // 원 중심에서 몸체까지 정확히 100px이면 닿은 것이고, 100.5px이면 닿지 않는다.
-  assert.equal(brand((battle) => { battle.player.x = 1600; }).after, 105);
-  assert.equal(brand((battle) => { battle.player.x = 1600.5; }).after, 140);
-  // 직전에 피격되어 피격 간격 3초 안이면 피해가 없다.
-  assert.equal(brand((battle) => { battle.player.lastHitAt = battle.time; }).after, 140);
+  assert.equal(brand((battle) => { battle.player.x = 1600; }).after, 125);
+  assert.equal(brand((battle) => { battle.player.x = 1600.5; }).after, 160);
+  // 피해 시점(1.02초) 0.3초 이내에 피격되었으면 피격 간격 안이라 피해가 없고, 정확히 0.3초 전이면 피해가 들어간다.
+  assert.equal(brand((battle) => { battle.player.lastHitAt = battle.hazards[0].hitAt - 299; }).after, 160);
+  assert.equal(brand((battle) => { battle.player.lastHitAt = battle.hazards[0].hitAt - 300; }).after, 125);
 });
 
 test('the radiant cross hits through obstacles along its arms, and the commander stands still while it warns', () => {
@@ -125,9 +126,9 @@ test('the radiant cross hits through obstacles along its arms, and the commander
     return [before, hit];
   };
   // 보스 중심(1735,1500)의 가로 팔(y 1470~1530)이 벽 너머 플레이어(y 1480~1520)에 닿는다.
-  assert.deepEqual(cross(1455, [{ x: 1600, y: 1400, width: 20, height: 200 }]), [140, 110]);
+  assert.deepEqual(cross(1455, [{ x: 1600, y: 1400, width: 20, height: 200 }]), [160, 130]);
   // 보스 중심이 y 1600이면 가로 팔(y 1570~1630)과 세로 팔(x 1705~1765) 모두 플레이어에 닿지 않는다.
-  assert.deepEqual(cross(1555), [140, 140]);
+  assert.deepEqual(cross(1555), [160, 160]);
 });
 
 test('the rally summons four soldiers within 90px of the commander, on screen if needed, within the enemy cap', () => {
@@ -174,7 +175,7 @@ test('the holy aegis cuts damage by 70% for exactly 5s to the commander and enem
   assert.deepEqual([inside.hp, outside.hp], [22, 15]);
   // 플레이어는 방벽의 영향을 받지 않는다.
   battle.dealDamage(battle.player, 10);
-  assert.equal(battle.player.hp, 130);
+  assert.equal(battle.player.hp, 150);
   run(battle, 20);
   battle.dealDamage(boss, 10);
   battle.dealDamage(inside, 10);
@@ -201,9 +202,10 @@ test('killing the commander opens a boss reward window of 3 before pending level
   assert.equal(battle.choices.length, 3);
   assert.ok(battle.choices.every((id) => !['bossSkill', 'might', 'barrier', 'restore'].includes(id)));
 
-  // 특수 특기를 이미 가졌으면 나머지 3개만 나온다.
+  // 특수 특기를 모두 가졌으면 나머지 3개만 나온다.
   const owned = knightBattle();
   owned.applyReward('deathLord');
+  owned.applyReward('bloodFrenzy');
   owned.dealDamage(placeBoss(owned, 2300, 1455, 0, Infinity), 1800);
   run(owned, 20);
   assert.deepEqual(new Set(owned.choices), new Set(['might', 'barrier', 'restore']));
@@ -219,6 +221,34 @@ test('killing the commander opens a boss reward window of 3 before pending level
   assert.deepEqual(dying.choices, []);
 });
 
+test('the class special skill reward picks one missing special when the window opens and grants exactly that one', () => {
+  // 난수를 차례로 돌려준다: 선택지 3개를 고르는 데 3번, 특수 특기를 고르는 데 1번 쓴다.
+  const queued = (values) => () => values.shift();
+  const killBoss = (battle) => {
+    battle.dealDamage(placeBoss(battle, 2300, 1455, 0, Infinity), 1800);
+    run(battle, 20);
+  };
+  // 0이면 후보 첫 번째인 '직업 특수 특기'가 먼저 뽑힌다. 아직 없는 특기는 [피의 광란, 죽음의 군주] 순서다.
+  const battle = new Battle([], { character: 'deathKnight', spawning: false, random: queued([0, 0, 0, 0.99]) });
+  killBoss(battle);
+  assert.equal(battle.choices[0], 'bossSkill');
+  assert.equal(battle.bossSpecial, 'deathLord');
+  battle.choose(0);
+  assert.deepEqual([battle.rewardStacks.deathLord, battle.rewardStacks.bloodFrenzy, battle.bossSpecial], [1, 0, null]);
+  // 하나만 남았으면 그 특기다.
+  const second = new Battle([], { character: 'warlock', spawning: false, random: queued([0, 0, 0, 0]) });
+  second.applyReward('homing');
+  killBoss(second);
+  assert.equal(second.bossSpecial, 'surgeTuning');
+  second.choose(0);
+  assert.equal(second.rewardStacks.surgeTuning, 1);
+  // '직업 특수 특기'가 선택지에 없으면 정하지 않는다.
+  const none = new Battle([], { character: 'warlock', spawning: false, random: queued([0.99, 0.99, 0.99]) });
+  killBoss(none);
+  assert.ok(!none.choices.includes('bossSkill'));
+  assert.equal(none.bossSpecial, null);
+});
+
 test('boss rewards grant the class special skill, the commander\'s might and a full restore, without a warlock surge', () => {
   const warlock = new Battle([], { spawning: false });
   warlock.applyReward('bossSkill');
@@ -229,12 +259,13 @@ test('boss rewards grant the class special skill, the commander\'s might and a f
   for (let i = 0; i < 3; i++) strong.applyReward('damage');
   strong.applyReward('might');
   assert.deepEqual([strong.stats.damage, strong.stats.speed], [21, 275]);
-  // 데스 나이트는 죽음의 군주(×1.2)까지 곱한다: 14 × 1.2 × 1.3 = 21.84 → 22, 230 × 1.2 × 1.1 = 303.6 → 304.
+  // 데스 나이트는 죽음의 군주(×1.2)까지 곱한다: 16 × 1.2 × 1.3 = 24.96 → 25, 230 × 1.2 × 1.1 = 303.6 → 304.
   const knight = knightBattle();
+  knight.bossSpecial = 'deathLord';
   knight.applyReward('bossSkill');
   knight.applyReward('might');
   assert.equal(knight.rewardStacks.deathLord, 1);
-  assert.deepEqual([knight.stats.damage, knight.stats.speed, knight.player.maxHp], [22, 304, 168]);
+  assert.deepEqual([knight.stats.damage, knight.stats.speed, knight.player.maxHp], [25, 304, 192]);
   // 완전 회복: 최대 체력 +30, 체력을 최대치까지 회복한다.
   const hurt = new Battle([], { spawning: false });
   hurt.player.hp = 50;
@@ -249,19 +280,21 @@ test('boss rewards grant the class special skill, the commander\'s might and a f
   assert.equal(chooser.surgeUntil, -Infinity);
 });
 
-test('the holy barrier absorbs damage before health, keeps the 3s hurt cooldown, and refills after 8s without damage', () => {
+test('the holy barrier absorbs damage before health, keeps the 0.3s hurt cooldown, and refills after 8s without damage', () => {
   const battle = new Battle([], { spawning: false });
   battle.applyReward('barrier');
   // 최대 체력 100의 15% = 15.
   assert.deepEqual([battle.barrier, battle.barrierMax], [15, 15]);
   battle.dealDamage(battle.player, 10);
   assert.deepEqual([battle.barrier, battle.player.hp], [5, 100]);
-  // 배리어가 막아도 피격 간격 3초가 시작된다.
+  // 배리어가 막아도 피격 간격 0.3초가 시작된다.
   assert.equal(battle.dealDamage(battle.player, 20), false);
-  run(battle, 3000);
+  run(battle, 280);
+  assert.equal(battle.dealDamage(battle.player, 20), false);
+  run(battle, 20);
   battle.dealDamage(battle.player, 25);
   assert.deepEqual([battle.barrier, battle.player.hp], [0, 80]);
-  // 마지막 피격(3.0초)에서 8초가 지난 11.0초에 다시 가득 찬다.
+  // 마지막 피격(0.3초)에서 8초가 지난 8.3초에 다시 가득 찬다.
   run(battle, 7980);
   assert.equal(battle.barrier, 0);
   run(battle, 20);
@@ -271,19 +304,19 @@ test('the holy barrier absorbs damage before health, keeps the 3s hurt cooldown,
   assert.equal(battle.barrierMax, 18);
 });
 
-test('killing the commander cancels pending attacks, drops one 30-experience orb, and stops its actions', () => {
+test('killing the commander cancels pending attacks, drops 30 experience as 60 orbs, and stops its actions', () => {
   const battle = knightBattle();
   const boss = placeBoss(battle, 2300, 1455, 0, 0);
   run(battle, 20);
   assert.equal(battle.hazards.length, 1);
-  const point = center(boss);
+  const body = { x: boss.x, y: boss.y, width: boss.width, height: boss.height };
   battle.dealDamage(boss, 1800);
   assert.deepEqual(battle.hazards, []);
-  assert.equal(battle.orbs.length, 1);
-  assert.equal(battle.orbs[0].value, 30);
-  assert.deepEqual(center(battle.orbs[0]), point);
+  // 경험치 30 = 0.5 구슬 60개가 보스 몸체 안에 생긴다.
+  assert.equal(battle.orbs.length, 60);
+  assert.ok(battle.orbs.every((orb) => orb.value === 0.5 && contains(body, orb)));
   run(battle, 10_000);
-  assert.equal(battle.player.hp, 140);
+  assert.equal(battle.player.hp, 160);
   assert.deepEqual(battle.hazards, []);
   assert.ok(!battle.enemies.includes(boss));
 });

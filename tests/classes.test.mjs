@@ -32,17 +32,21 @@ test('each class starts from its own stats and the warlock keeps the original va
   assert.deepEqual(statsFor(emptyStacks(), 'warlock'),
     { damage: 10, attackMs: 500, speed: 250, shotSpeed: 700, pickupRadius: 100, choiceCount: 3 });
   const knight = new Battle([], { spawning: false, character: 'deathKnight' });
-  assert.deepEqual([knight.player.hp, knight.player.maxHp, knight.player.width], [140, 140, 40]);
+  assert.deepEqual([knight.player.hp, knight.player.maxHp, knight.player.width], [160, 160, 40]);
   assert.deepEqual(statsFor(emptyStacks(), 'deathKnight'),
-    { damage: 14, attackMs: 800, speed: 230, shotSpeed: 700, pickupRadius: 100, choiceCount: 3 });
+    { damage: 16, attackMs: 800, speed: 230, shotSpeed: 700, pickupRadius: 100, choiceCount: 3 });
   assert.deepEqual(skillStatsFor(emptyStacks(), 'deathKnight'),
-    { shots: 1, explosionRadius: 0, expPercent: 100, homing: false, swingRadius: 100, killHeal: 1 });
+    { shots: 1, explosionRadius: 0, expPercent: 100, homing: false, surgeMs: 5000, surgePercent: 20, swingRadius: 100, killHeal: 1,
+      frenzy: false });
 });
 
 test('reward pools mix common rewards with only the class skills and drop excluded rewards', () => {
-  assert.deepEqual(rewardPool('warlock'), [...REWARD_IDS, 'multiShot', 'explosion', 'soulHarvest', 'homing']);
+  // 영혼 흡수는 공통 보상이므로 두 직업 모두의 후보다.
+  assert.ok(REWARD_IDS.includes('soulHarvest'));
+  assert.equal(REWARDS.soulHarvest.character, undefined);
+  assert.deepEqual(rewardPool('warlock'), [...REWARD_IDS, 'multiShot', 'explosion', 'homing', 'surgeTuning']);
   assert.deepEqual(rewardPool('deathKnight'),
-    [...REWARD_IDS.filter((id) => id !== 'shotSpeed'), 'swingRange', 'bloodThirst', 'deathLord']);
+    [...REWARD_IDS.filter((id) => id !== 'shotSpeed'), 'swingRange', 'bloodThirst', 'bloodFrenzy', 'deathLord']);
   for (const character of ['warlock', 'deathKnight']) {
     const pool = new Set(rewardPool(character));
     for (let seed = 1; seed <= 40; seed++) {
@@ -63,12 +67,13 @@ test('special skills use a 0.1 weight, appear at most once, and infinite skills 
   const owned = emptyStacks();
   owned.homing = 1;
   assert.deepEqual(rollChoices(owned, 3, () => 0.99, pool), ['damage']);
-  assert.equal(REWARDS.homing.maxStacks, 1);
-  assert.equal(REWARDS.deathLord.maxStacks, 1);
+  for (const id of ['homing', 'surgeTuning', 'bloodFrenzy', 'deathLord']) {
+    assert.deepEqual([REWARDS[id].maxStacks, REWARDS[id].special], [1, true], id);
+  }
   const veteran = emptyStacks();
-  for (const id of ['multiShot', 'explosion', 'soulHarvest']) veteran[id] = 1000;
-  assert.deepEqual(new Set(rollChoices(veteran, 5, () => 0, ['multiShot', 'explosion', 'soulHarvest'])),
-    new Set(['multiShot', 'explosion', 'soulHarvest']));
+  for (const id of ['multiShot', 'explosion', 'swingRange']) veteran[id] = 1000;
+  assert.deepEqual(new Set(rollChoices(veteran, 5, () => 0, ['multiShot', 'explosion', 'swingRange'])),
+    new Set(['multiShot', 'explosion', 'swingRange']));
 });
 
 test('surge boosts warlock damage, speed and attack rate for 5s after a choice, without stacking', () => {
@@ -95,6 +100,48 @@ test('surge boosts warlock damage, speed and attack rate for 5s after a choice, 
   knight.choices = ['heal'];
   knight.choose(0);
   assert.equal(knight.surgeUntil, -Infinity);
+});
+
+test('surge tuning doubles the surge duration and its stat changes, starting with the surge of the choice that grants it', () => {
+  const battle = frozenBattle('warlock');
+  const player = center(battle.player);
+  battle.orbs.push(orbAt(1, player.x, player.y, 5));
+  step(battle, 20);
+  battle.choices = ['surgeTuning'];
+  battle.choose(0);
+  // 10초 동안 공격력·이동속도 +40%, 공격 간격 −40%.
+  assert.equal(battle.surgeUntil, battle.time + 10_000);
+  assert.deepEqual([battle.currentStats().damage, battle.currentStats().speed, battle.currentStats().attackMs], [14, 350, 300]);
+  step(battle, 10_000 - 20);
+  assert.equal(battle.currentStats().damage, 14);
+  step(battle, 20);
+  assert.deepEqual([battle.currentStats().damage, battle.currentStats().speed, battle.currentStats().attackMs], [10, 250, 500]);
+});
+
+test('blood frenzy doubles the next swing after a kill, once, and recharges when that swing kills again', () => {
+  const battle = frozenBattle('deathKnight');
+  battle.applyReward('bloodFrenzy');
+  const target = tough(100, 'soldier', 1550, 1480);
+  // 한 번 휘둘러 두 마리를 처치해도 강화는 한 번만 쌓인다.
+  battle.enemies.push(target, tough(101, 'archer', 1440, 1480, 16), tough(102, 'archer', 1480, 1420, 16));
+  const dealt = () => 100000 - target.hp;
+  step(battle, 20);
+  assert.deepEqual([dealt(), battle.kills, battle.frenzyCharged], [16, 2, true]);
+  // 0.82초: 강화된 휘두르기(32)가 대상과 체력 32의 궁사에 함께 들어가고, 궁사를 처치해 다시 쌓인다.
+  battle.enemies.push(tough(103, 'archer', 1440, 1480, 32));
+  step(battle, 800);
+  assert.deepEqual([dealt(), battle.kills, battle.frenzyCharged], [48, 3, true]);
+  // 1.62초: 강화된 휘두르기지만 처치가 없어 다음은 원래 공격력이다.
+  step(battle, 800);
+  assert.deepEqual([dealt(), battle.frenzyCharged], [80, false]);
+  step(battle, 800);
+  assert.equal(dealt(), 96);
+  // 피의 광란이 없으면 처치해도 강화되지 않는다.
+  const plain = frozenBattle('deathKnight');
+  const other = tough(100, 'soldier', 1550, 1480);
+  plain.enemies.push(other, tough(101, 'archer', 1440, 1480, 16));
+  step(plain, 820);
+  assert.deepEqual([100000 - other.hp, plain.frenzyCharged], [32, false]);
 });
 
 test('surged warlock shots carry the boosted damage and fire every 0.4s', () => {
@@ -172,7 +219,7 @@ test('explosions splash 50% damage onto other bodies touching the radius, throug
   assert.equal(neighbor.hp, 100000);
 });
 
-test('explosion kills count once and drop exactly one orb each', () => {
+test('explosion kills count once and drop their orbs exactly once each', () => {
   const battle = frozenBattle('warlock');
   for (let i = 0; i < 3; i++) battle.applyReward('explosion');
   // 반경 60px 안, 투사체 경로(y=2050) 위아래에 체력 5의 궁사 둘을 둔다.
@@ -182,13 +229,14 @@ test('explosion kills count once and drop exactly one orb each', () => {
   shotAtPaladin(battle);
   step(battle, 400);
   assert.equal(battle.kills, 2);
-  assert.equal(battle.orbs.length, 2);
+  // 궁사 경험치 1 = 0.5 구슬 2개씩.
+  assert.equal(battle.orbs.length, 4);
   assert.ok(weak.every((enemy) => enemy.hp === 0));
 });
 
 test('soul harvest multiplies experience exactly and carries the fraction to later orbs', () => {
-  const collect = (stacks, values) => {
-    const battle = frozenBattle('warlock');
+  const collect = (stacks, values, character = 'warlock') => {
+    const battle = frozenBattle(character);
     for (let i = 0; i < stacks; i++) battle.applyReward('soulHarvest');
     const total = () => {
       let sum = battle.experience;
@@ -207,6 +255,8 @@ test('soul harvest multiplies experience exactly and carries the fraction to lat
   // +10%: 1이 10번이면 11, 9번이면 9.9이므로 9다.
   assert.equal(collect(1, Array(10).fill(1)), 11);
   assert.equal(collect(1, Array(9).fill(1)), 9);
+  // 공통 보상이므로 데스 나이트도 같은 배율을 얻는다.
+  assert.equal(collect(1, Array(10).fill(1), 'deathKnight'), 11);
   // +30%: 3 → 3.9(3, 이월 0.9) → 7.8(7). 총량은 floor(6 × 1.3) = 7이다.
   assert.equal(collect(3, [3, 3]), 7);
 });
@@ -245,15 +295,15 @@ test('death knight swings hit every enemy touching the 100px radius once, but no
     step(battle, 20);
     return 100000 - target.hp;
   };
-  assert.equal(hits(-0.5), 14);
-  assert.equal(hits(0), 14);
+  assert.equal(hits(-0.5), 16);
+  assert.equal(hits(0), 16);
   assert.equal(hits(0.5), 0);
   assert.equal(hits(0, [{ x: 1550, y: 1400, width: 10, height: 200 }]), 0);
   const battle = frozenBattle('deathKnight');
   const crowd = [tough(100, 'soldier', 1420, 1480), tough(101, 'soldier', 1540, 1480), tough(102, 'soldier', 1480, 1420)];
   battle.enemies.push(...crowd);
   step(battle, 20);
-  assert.deepEqual(crowd.map((enemy) => 100000 - enemy.hp), [14, 14, 14]);
+  assert.deepEqual(crowd.map((enemy) => 100000 - enemy.hp), [16, 16, 16]);
   assert.equal(battle.projectiles.length, 0);
   assert.equal(battle.effects.length, 1);
 });
@@ -264,7 +314,7 @@ test('death knight swings keep the 0.8s interval at different frame sizes and wa
     const enemy = tough(100, 'soldier', 1550, 1480);
     battle.enemies.push(enemy);
     for (let t = 0; t < 2000; t += frame) battle.update(frame, { x: 0, y: 0 }, stillView);
-    return (100000 - enemy.hp) / 14;
+    return (100000 - enemy.hp) / 16;
   };
   // 첫 단계 이후 0.8초마다: 2초 동안 3번이다.
   assert.equal(swings(20), 3);
@@ -274,14 +324,14 @@ test('death knight swings keep the 0.8s interval at different frame sizes and wa
   const late = tough(100, 'soldier', 1550, 1480);
   idle.enemies.push(late);
   step(idle, 20);
-  assert.equal(100000 - late.hp, 14);
+  assert.equal(100000 - late.hp, 16);
 });
 
 test('death knight heals on each kill, more with blood thirst, never above max health', () => {
   const battle = frozenBattle('deathKnight');
   battle.player.hp = 100;
   let nextId = 100;
-  const prey = () => { const enemy = createEnemy(nextId++, 'archer', 1550, 1480); enemy.hp = 14; return enemy; };
+  const prey = () => { const enemy = createEnemy(nextId++, 'archer', 1550, 1480); enemy.hp = 16; return enemy; };
   battle.enemies.push(prey());
   step(battle, 20);
   assert.deepEqual([battle.kills, battle.player.hp], [1, 101]);
@@ -289,11 +339,11 @@ test('death knight heals on each kill, more with blood thirst, never above max h
   battle.enemies.push(prey());
   step(battle, 800);
   assert.deepEqual([battle.kills, battle.player.hp], [2, 104]);
-  battle.player.hp = 139;
+  battle.player.hp = 159;
   battle.enemies.push(prey());
   step(battle, 800);
-  assert.equal(battle.player.hp, 140);
-  // 궁사 3마리의 구슬(각 1)이 하나씩만 생겼다. 획득 반경 안에 떨어지므로 획득분과 남은 구슬을 합친다.
+  assert.equal(battle.player.hp, 160);
+  // 궁사 3마리의 구슬(경험치 1 = 0.5 × 2개)이 한 번씩만 생겼다. 획득 반경 안에 떨어지므로 획득분과 남은 구슬을 합친다.
   assert.equal(battle.experience + battle.orbs.reduce((sum, orb) => sum + orb.value, 0), 3);
 });
 
@@ -301,15 +351,15 @@ test('death lord raises damage, speed and max health by 20% and shortens the att
   const stacks = emptyStacks();
   stacks.deathLord = 1;
   assert.deepEqual(statsFor(stacks, 'deathKnight'),
-    { damage: 17, attackMs: 640, speed: 276, shotSpeed: 700, pickupRadius: 100, choiceCount: 3 });
-  assert.equal(maxHpFor(stacks, 'deathKnight'), 168);
+    { damage: 19, attackMs: 640, speed: 276, shotSpeed: 700, pickupRadius: 100, choiceCount: 3 });
+  assert.equal(maxHpFor(stacks, 'deathKnight'), 192);
   const battle = new Battle([], { spawning: false, character: 'deathKnight' });
   battle.player.hp = 100;
   battle.applyReward('deathLord');
-  assert.deepEqual([battle.player.hp, battle.player.maxHp], [128, 168]);
-  // 이후 최대 체력 강화도 같은 비율로 적용된다: (140 + 20) × 1.2 = 192.
+  assert.deepEqual([battle.player.hp, battle.player.maxHp], [132, 192]);
+  // 이후 최대 체력 강화도 같은 비율로 적용된다: 160 × 1.2(강화 1회) × 1.2 = 230.4 → 230.
   battle.applyReward('maxHp');
-  assert.deepEqual([battle.player.hp, battle.player.maxHp], [152, 192]);
+  assert.deepEqual([battle.player.hp, battle.player.maxHp], [170, 230]);
 });
 
 test('level-up choices for each class only come from that class pool', () => {

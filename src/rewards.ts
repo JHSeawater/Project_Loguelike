@@ -1,7 +1,9 @@
 import { BATTLE_CONFIG as CFG, CHARACTER_STATS, SKILL_CONFIG as SKILL, type CharacterId } from './battle-config.ts';
 
-export type CommonRewardId = 'damage' | 'attackSpeed' | 'maxHp' | 'moveSpeed' | 'shotSpeed' | 'pickupRadius' | 'choices' | 'heal';
-export type SkillId = 'multiShot' | 'explosion' | 'soulHarvest' | 'homing' | 'swingRange' | 'bloodThirst' | 'deathLord';
+export type CommonRewardId = 'damage' | 'attackSpeed' | 'maxHp' | 'moveSpeed' | 'shotSpeed' | 'pickupRadius' | 'choices' | 'heal'
+  | 'soulHarvest';
+export type SkillId = 'multiShot' | 'explosion' | 'homing' | 'surgeTuning' | 'swingRange' | 'bloodThirst' | 'bloodFrenzy'
+  | 'deathLord';
 export type BossRewardId = 'bossSkill' | 'might' | 'barrier' | 'restore';
 export type RewardId = CommonRewardId | SkillId | BossRewardId;
 
@@ -21,32 +23,38 @@ export const BOSS_REWARD = {
   choices: 3, mightDamagePercent: 30, mightSpeedPercent: 10, barrierPercent: 15, barrierRegenMs: 8000, restoreMaxHp: 30,
 } as const;
 
-// 기본값 기준 고정 증가량을 더한다. 효과량과 최대 중첩은 플레이 테스트로 조정한다.
+// 직업 시작 능력치(공격력·공격 간격·최대 체력·이동속도)는 시작값의 일정 비율(%)을, 나머지는 기본값 기준 고정 증가량을 더한다.
+// 효과량과 최대 중첩은 플레이 테스트로 조정한다.
 export const REWARD_STEP = {
-  damage: 2, attackMs: 50, maxHp: 20, speed: 25, shotSpeed: 105, pickupRadius: 25, choices: 1, healPercent: 30,
+  damagePercent: 20, attackPercent: 10, maxHpPercent: 20, speedPercent: 10, shotSpeed: 105, pickupRadius: 25, choices: 1, healPercent: 30,
+  expPercent: 10,
 } as const;
 
 export const BASE_CHOICES = 3;
 
 export const REWARDS: Record<RewardId, RewardDef> = {
-  damage: { name: '공격력 강화', effect: `공격력 +${REWARD_STEP.damage}`, maxStacks: 10 },
-  attackSpeed: { name: '공격 속도 강화', effect: `공격 간격 −${REWARD_STEP.attackMs / 1000}초`, maxStacks: 5 },
-  maxHp: { name: '최대 체력 강화', effect: `최대 체력 +${REWARD_STEP.maxHp}\n현재 체력 +${REWARD_STEP.maxHp}`, maxStacks: 10 },
-  moveSpeed: { name: '이동속도 강화', effect: `이동속도 +${REWARD_STEP.speed}`, maxStacks: 5 },
+  damage: { name: '공격력 강화', effect: `공격력 +${REWARD_STEP.damagePercent}%`, maxStacks: Infinity },
+  attackSpeed: { name: '공격 속도 강화', effect: `공격 간격 −${REWARD_STEP.attackPercent}%`, maxStacks: 5 },
+  maxHp: { name: '최대 체력 강화', effect: `최대 체력 +${REWARD_STEP.maxHpPercent}%\n현재 체력도 같은 만큼 증가`, maxStacks: Infinity },
+  moveSpeed: { name: '이동속도 강화', effect: `이동속도 +${REWARD_STEP.speedPercent}%`, maxStacks: Infinity },
   shotSpeed: { name: '투사체 속도 강화', effect: `투사체 속도 +${REWARD_STEP.shotSpeed}`, maxStacks: 3 },
   pickupRadius: { name: '획득 반경 확대', effect: `획득 반경 +${REWARD_STEP.pickupRadius}`, maxStacks: 5 },
   choices: { name: '선택지 추가', effect: `레벨업 선택지 +${REWARD_STEP.choices}`, maxStacks: 2 },
   heal: { name: '체력 회복', effect: `최대 체력의 ${REWARD_STEP.healPercent}% 회복`, maxStacks: Infinity },
+  soulHarvest: { name: '영혼 흡수', effect: `경험치 획득량 +${REWARD_STEP.expPercent}%`, maxStacks: Infinity },
   multiShot: { name: '다중 시전', effect: '발사 수 +1', maxStacks: Infinity, character: 'warlock' },
   explosion: { name: '마력 폭발', effect: `폭발 반경 +${SKILL.explosion.radiusStep}\n주변 적에게 공격력의 ${SKILL.explosion.damagePercent}%`,
     maxStacks: Infinity, character: 'warlock' },
-  soulHarvest: { name: '영혼 흡수', effect: `경험치 획득량 +${SKILL.soulHarvest.percentStep}%`, maxStacks: Infinity, character: 'warlock' },
   homing: { name: '추적 마탄', effect: '투사체가 가까운 적을\n향해 방향을 바꾼다', maxStacks: 1, character: 'warlock', special: true },
+  surgeTuning: { name: '마력 조정', effect: `마력 폭주의 지속 시간과\n능력치 변화량 ${SKILL.surgeTuning.multiplier}배`,
+    maxStacks: 1, character: 'warlock', special: true },
   swingRange: { name: '참격 확장', effect: `공격 반경 +${SKILL.swingRange.radiusStep}`, maxStacks: Infinity, character: 'deathKnight' },
   bloodThirst: { name: '피의 갈증', effect: `처치 시 회복 +${SKILL.bloodThirst.healStep}`, maxStacks: Infinity, character: 'deathKnight' },
+  bloodFrenzy: { name: '피의 광란', effect: `처치하면 다음 1회 공격의\n공격력 ${SKILL.bloodFrenzy.damageMultiplier}배`,
+    maxStacks: 1, character: 'deathKnight', special: true },
   deathLord: { name: '죽음의 군주', effect: `공격력·이동속도·최대 체력 +${SKILL.deathLord.percent}%\n공격 간격 −${SKILL.deathLord.percent}%`,
     maxStacks: 1, character: 'deathKnight', special: true },
-  bossSkill: { name: '직업 특수 특기', effect: '이 직업의 특수 특기를\n바로 얻는다', maxStacks: 1, boss: true },
+  bossSkill: { name: '직업 특수 특기', effect: '이 직업의 특수 특기 하나를\n바로 얻는다', maxStacks: 1, boss: true },
   might: { name: '기사단장의 힘', effect: `공격력 +${BOSS_REWARD.mightDamagePercent}%\n이동속도 +${BOSS_REWARD.mightSpeedPercent}%`,
     maxStacks: 1, boss: true },
   barrier: { name: '성스러운 방벽', effect: `최대 체력의 ${BOSS_REWARD.barrierPercent}%를 막는 배리어\n`
@@ -55,18 +63,19 @@ export const REWARDS: Record<RewardId, RewardDef> = {
 };
 
 // 모든 직업에 공통인 보상. 직업 특기는 SKILL_IDS에 따로 둔다.
-export const REWARD_IDS: CommonRewardId[] = ['damage', 'attackSpeed', 'maxHp', 'moveSpeed', 'shotSpeed', 'pickupRadius', 'choices', 'heal'];
-export const SKILL_IDS: SkillId[] = ['multiShot', 'explosion', 'soulHarvest', 'homing', 'swingRange', 'bloodThirst', 'deathLord'];
+export const REWARD_IDS: CommonRewardId[] = ['damage', 'attackSpeed', 'maxHp', 'moveSpeed', 'shotSpeed', 'pickupRadius', 'choices', 'heal',
+  'soulHarvest'];
+export const SKILL_IDS: SkillId[] = ['multiShot', 'explosion', 'homing', 'surgeTuning', 'swingRange', 'bloodThirst', 'bloodFrenzy', 'deathLord'];
 export const BOSS_REWARD_IDS: BossRewardId[] = ['bossSkill', 'might', 'barrier', 'restore'];
 
-// 직업의 특수 특기. 보스 보상 '직업 특수 특기'로 얻는 특기다.
-export function specialSkillOf(character: CharacterId): SkillId {
-  return SKILL_IDS.find((id) => REWARDS[id].character === character && REWARDS[id].special)!;
+// 직업의 특수 특기 중 아직 얻지 않은 것. 보스 보상 '직업 특수 특기'는 이 중 하나를 준다.
+export function missingSpecialSkills(stacks: RewardStacks, character: CharacterId): SkillId[] {
+  return SKILL_IDS.filter((id) => REWARDS[id].character === character && REWARDS[id].special && stacks[id] === 0);
 }
 
-// 보스 보상 후보. 특수 특기를 이미 가졌으면 '직업 특수 특기'를 뺀다.
+// 보스 보상 후보. 특수 특기를 모두 가졌으면 '직업 특수 특기'를 뺀다.
 export function bossRewardPool(stacks: RewardStacks, character: CharacterId): RewardId[] {
-  return BOSS_REWARD_IDS.filter((id) => id !== 'bossSkill' || stacks[specialSkillOf(character)] === 0);
+  return BOSS_REWARD_IDS.filter((id) => id !== 'bossSkill' || missingSpecialSkills(stacks, character).length > 0);
 }
 
 // 직업 컨셉에 맞지 않는 공통 보상. 투사체가 없는 데스 나이트는 투사체 속도 강화를 받지 않는다.
@@ -101,13 +110,18 @@ const lordScale = (stacks: RewardStacks): number => stacks.deathLord ? SKILL.dea
 // 보스 보상 '기사단장의 힘'은 공통 보상과 직업 특기까지 더한 값에 곱한다.
 const mightScale = (stacks: RewardStacks, percent: number): number => 1 + (stacks.might ? percent / 100 : 0);
 
+// 직업 시작값에 중첩 수만큼의 비율을 더한다(복리 아님). 백분율 정수로 곱해 소수 오차를 줄인다.
+const raised = (base: number, stackCount: number, percent: number): number => base * (100 + stackCount * percent) / 100;
+
 // 최대 체력과 회복은 현재 체력과 함께 바뀌므로 전투에서 직접 적용하고, 나머지는 중첩 수로 계산한다.
 export function statsFor(stacks: RewardStacks, character: CharacterId = 'warlock'): PlayerStats {
   const base = CHARACTER_STATS[character], lord = lordScale(stacks);
   return {
-    damage: Math.round((base.damage + stacks.damage * REWARD_STEP.damage) * (1 + lord) * mightScale(stacks, BOSS_REWARD.mightDamagePercent)),
-    attackMs: Math.round((base.attackMs - stacks.attackSpeed * REWARD_STEP.attackMs) * (1 - lord)),
-    speed: Math.round((base.speed + stacks.moveSpeed * REWARD_STEP.speed) * (1 + lord) * mightScale(stacks, BOSS_REWARD.mightSpeedPercent)),
+    damage: Math.round(raised(base.damage, stacks.damage, REWARD_STEP.damagePercent) * (1 + lord)
+      * mightScale(stacks, BOSS_REWARD.mightDamagePercent)),
+    attackMs: Math.round(raised(base.attackMs, stacks.attackSpeed, -REWARD_STEP.attackPercent) * (1 - lord)),
+    speed: Math.round(raised(base.speed, stacks.moveSpeed, REWARD_STEP.speedPercent) * (1 + lord)
+      * mightScale(stacks, BOSS_REWARD.mightSpeedPercent)),
     shotSpeed: CFG.playerShot.speed + stacks.shotSpeed * REWARD_STEP.shotSpeed,
     pickupRadius: CFG.player.pickupRadius + stacks.pickupRadius * REWARD_STEP.pickupRadius,
     choiceCount: BASE_CHOICES + stacks.choices * REWARD_STEP.choices,
@@ -115,7 +129,7 @@ export function statsFor(stacks: RewardStacks, character: CharacterId = 'warlock
 }
 
 export function maxHpFor(stacks: RewardStacks, character: CharacterId = 'warlock'): number {
-  return Math.round((CHARACTER_STATS[character].hp + stacks.maxHp * REWARD_STEP.maxHp + stacks.restore * BOSS_REWARD.restoreMaxHp)
+  return Math.round((raised(CHARACTER_STATS[character].hp, stacks.maxHp, REWARD_STEP.maxHpPercent) + stacks.restore * BOSS_REWARD.restoreMaxHp)
     * (1 + lordScale(stacks)));
 }
 
@@ -125,19 +139,27 @@ export interface SkillStats {
   // 경험치 획득 배율(백분율). 정수로 계산해 소수점 이월이 정확하도록 한다.
   expPercent: number;
   homing: boolean;
+  // 마력 폭주의 지속 시간과 능력치 변화량(%). 마력 조정을 얻으면 함께 커진다.
+  surgeMs: number;
+  surgePercent: number;
   swingRadius: number;
   killHeal: number;
+  frenzy: boolean;
 }
 
 export function skillStatsFor(stacks: RewardStacks, character: CharacterId = 'warlock'): SkillStats {
   const base = CHARACTER_STATS[character];
+  const tuning = stacks.surgeTuning ? SKILL.surgeTuning.multiplier : 1;
   return {
     shots: 1 + stacks.multiShot,
     explosionRadius: stacks.explosion * SKILL.explosion.radiusStep,
-    expPercent: 100 + stacks.soulHarvest * SKILL.soulHarvest.percentStep,
+    expPercent: 100 + stacks.soulHarvest * REWARD_STEP.expPercent,
     homing: stacks.homing > 0,
+    surgeMs: SKILL.surge.durationMs * tuning,
+    surgePercent: SKILL.surge.percent * tuning,
     swingRadius: base.swingRadius + stacks.swingRange * SKILL.swingRange.radiusStep,
     killHeal: base.killHeal + stacks.bloodThirst * SKILL.bloodThirst.healStep,
+    frenzy: stacks.bloodFrenzy > 0,
   };
 }
 

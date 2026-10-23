@@ -4,10 +4,11 @@ export type CharacterId = 'warlock' | 'deathKnight';
 export const BATTLE_CONFIG = {
   world: { x: 50, y: 50, width: 2900, height: 2900 },
   // 모든 직업에 공통인 플레이어 값이다. 획득 반경은 '획득 반경 확대' 보상으로 늘어난다.
-  player: { size: 40, hurtMs: 3000, pickupRadius: 100 },
+  player: { size: 40, hurtMs: 300, pickupRadius: 100 },
   playerShot: { speed: 700, size: 8, lifeMs: 4000, color: 0xf5e6a8 },
   enemyShot: { speed: 280, size: 10, lifeMs: 6000 },
-  expOrb: { size: 12, pullSpeed: 450, max: 300 },
+  // 구슬 하나의 값은 value로 같다. 적은 경험치를 이 값으로 나눈 수만큼 구슬을 떨어뜨린다.
+  expOrb: { size: 12, pullSpeed: 700, max: 300, value: 0.5 },
   // 적끼리는 몸체 위쪽 이 비율만큼 겹칠 수 있다. 장애물의 위쪽 통과 영역처럼 다른 적 뒤로 살짝 들어간다.
   enemyPassTop: 0.25,
   spawnMargin: 96,
@@ -121,10 +122,10 @@ export interface CharacterStats {
   color: number;
 }
 
-// 직업별 시작 능력치. 크기 40×40과 피격 간격 3초는 모든 직업이 같다.
+// 직업별 시작 능력치. 크기 40×40과 피격 간격 0.3초는 모든 직업이 같다.
 export const CHARACTER_STATS: Record<CharacterId, CharacterStats> = {
   warlock: { name: '워록', hp: 100, damage: 10, speed: 250, attackMs: 500, attack: 'shot', swingRadius: 0, killHeal: 0, color: 0x66ddaa },
-  deathKnight: { name: '데스 나이트', hp: 140, damage: 14, speed: 230, attackMs: 800, attack: 'swing', swingRadius: 100, killHeal: 1, color: 0xe0d8c3 },
+  deathKnight: { name: '데스 나이트', hp: 160, damage: 16, speed: 230, attackMs: 800, attack: 'swing', swingRadius: 100, killHeal: 1, color: 0xe0d8c3 },
 };
 
 // 직업 패시브와 특기의 초기값. 플레이 테스트로 조정한다.
@@ -132,10 +133,13 @@ export const SKILL_CONFIG = {
   surge: { durationMs: 5000, percent: 20 },
   multiShot: { spreadDeg: 10, maxSpreadDeg: 60 },
   explosion: { radiusStep: 20, damagePercent: 50 },
-  soulHarvest: { percentStep: 10 },
   homing: { turnDegPerSec: 270 },
+  // 마력 조정: 마력 폭주의 지속 시간과 능력치 변화량에 곱한다.
+  surgeTuning: { multiplier: 2 },
   swingRange: { radiusStep: 15 },
   bloodThirst: { healStep: 1 },
+  // 피의 광란: 처치 뒤 다음 1회 휘두르기의 공격력에 곱한다.
+  bloodFrenzy: { damageMultiplier: 2 },
   deathLord: { percent: 20 },
   // 특수 특기가 선택지에 뽑힐 가중치. 다른 후보는 1이다.
   specialWeight: 0.1,

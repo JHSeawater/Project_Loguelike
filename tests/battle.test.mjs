@@ -105,12 +105,12 @@ test('swept projectiles hit the first enemy, pass obstacles, and still damage of
   assert.ok(!battle.projectiles.some((shot) => shot.id === 700));
 });
 
-test('player damage has a 3s shared cooldown, enemies have no damage cooldown', () => {
+test('player damage has a 0.3s shared cooldown, enemies have no damage cooldown', () => {
   const battle = new Battle([], { spawning: false });
   assert.ok(battle.dealDamage(battle.player, 10));
   assert.equal(battle.player.hp, 90);
   assert.equal(battle.dealDamage(battle.player, 10), false);
-  tick(battle, 2980);
+  tick(battle, 280);
   assert.equal(battle.dealDamage(battle.player, 10), false);
   tick(battle, 20);
   assert.ok(battle.dealDamage(battle.player, 20));
@@ -316,24 +316,29 @@ const step = (battle, ms, size, input = { x: 0, y: 0 }) => {
   for (let remaining = ms; remaining > 0; remaining -= size) battle.update(Math.min(size, remaining), input, stillView);
 };
 
-test('every enemy kind drops one orb with its table experience at its center', () => {
-  const expected = { soldier: 1, knight: 3, paladin: 4, archer: 1, mage: 2 };
-  for (const [kind, value] of Object.entries(expected)) {
-    assert.equal(ENEMY_STATS[kind].exp, value);
+test('every enemy kind drops 0.5-point orbs adding up to its table experience, spread inside its body', () => {
+  // 경험치 ÷ 0.5개: 광신도 1, 병사·궁사 2, 마법사·석궁병 4, 사제 5, 기사 6, 성기사 8, 성기사단장 60.
+  const expected = { soldier: [1, 2], knight: [3, 6], paladin: [4, 8], archer: [1, 2], mage: [2, 4], zealot: [0.5, 1],
+    crossbowman: [2, 4], priest: [2.5, 5], commander: [30, 60] };
+  assert.equal(CFG.expOrb.value, 0.5);
+  for (const [kind, [exp, count]] of Object.entries(expected)) {
+    assert.equal(ENEMY_STATS[kind].exp, exp);
     const battle = new Battle([], { spawning: false });
     const enemy = createEnemy(100, kind, 2000, 2000);
     battle.enemies.push(enemy);
-    battle.dealDamage(enemy, 1000);
-    assert.equal(battle.orbs.length, 1, kind);
-    assert.equal(battle.orbs[0].value, value);
-    assert.deepEqual(center(battle.orbs[0]), center(enemy));
+    battle.dealDamage(enemy, 100000);
+    assert.equal(battle.orbs.length, count, kind);
+    assert.ok(battle.orbs.every((orb) => orb.value === 0.5 && contains(enemy, orb)), kind);
+    // 같은 위치에 겹치지 않는다.
+    assert.equal(new Set(battle.orbs.map((orb) => `${orb.x},${orb.y}`)).size, count, kind);
+    if (count === 1) assert.deepEqual(center(battle.orbs[0]), center(enemy));
     // 처치 주체와 관계없이 발생하고, 이미 죽은 적에게 다시 피해를 주어도 중복되지 않는다.
     battle.dealDamage(enemy, 1000);
-    assert.equal(battle.orbs.length, 1);
+    assert.equal(battle.orbs.length, count);
   }
 });
 
-test('several shots killing one enemy in the same frame count one kill and drop one orb', () => {
+test('several shots killing one enemy in the same frame count one kill and drop its orbs once', () => {
   const battle = new Battle([], { spawning: false });
   const enemy = createEnemy(100, 'soldier', 1700, 1480);
   enemy.hp = 10;
@@ -344,24 +349,28 @@ test('several shots killing one enemy in the same frame count one kill and drop 
   }
   battle.update(20, { x: 0, y: 0 }, stillView);
   assert.equal(battle.kills, 1);
-  assert.equal(battle.orbs.length, 1);
+  // 병사 경험치 1 = 0.5 구슬 2개가 한 번만 생긴다.
+  assert.equal(battle.orbs.length, 2);
   assert.equal(battle.enemies.length, 0);
-  assert.equal(battle.orbs[0].value, 1);
+  assert.equal(battle.orbs.reduce((sum, orb) => sum + orb.value, 0), 1);
 });
 
 test('orbs over the cap merge into the oldest orb and preserve total experience', () => {
   const battle = new Battle([], { spawning: false });
   let total = 0;
-  for (let i = 0; i < CFG.expOrb.max + 3; i++) {
-    const enemy = createEnemy(100 + i, i % 2 ? 'paladin' : 'soldier', 200 + i % 20 * 100, 200 + Math.floor(i / 20) * 100);
+  // 병사 150마리(구슬 2개씩)로 상한 300개를 채운 뒤 병사·성기사를 더 처치한다. 상한에 걸리면 남은 구슬도 모두 합친다.
+  const kinds = [...Array(CFG.expOrb.max / 2).fill('soldier'), 'soldier', 'paladin'];
+  kinds.forEach((kind, i) => {
+    const enemy = createEnemy(100 + i, kind, 200 + i % 20 * 100, 200 + Math.floor(i / 20) * 100);
     battle.enemies.push(enemy);
     battle.dealDamage(enemy, 1000);
     total += ENEMY_STATS[enemy.kind].exp;
-  }
+  });
   assert.equal(battle.orbs.length, CFG.expOrb.max);
   assert.equal(battle.orbs.reduce((sum, orb) => sum + orb.value, 0), total);
-  // 첫 구슬(병사 1)에 상한을 넘긴 병사 1·성기사 4·병사 1이 차례로 더해진다.
-  assert.equal(battle.orbs[0].value, 1 + 1 + 4 + 1);
+  // 첫 구슬(0.5)에 상한을 넘긴 병사 1(0.5 × 2)과 성기사 4(0.5 × 8)가 더해진다.
+  assert.equal(battle.orbs[0].value, 0.5 + 1 + 4);
+  assert.ok(battle.orbs.slice(1).every((orb) => orb.value === 0.5));
 });
 
 test('orbs never expire and only orbs within the pickup radius are pulled', () => {
@@ -391,10 +400,11 @@ test('orb pull movement and pickup time do not depend on frame size', () => {
     step(battle, 100, size);
     return { x, collected: battle.orbs.length === 0, experience: battle.experience };
   };
-  // 반경 100px에서 몸체가 닿을 때까지 (100 - 20 - 6)px를 450px/초로 이동하므로 약 164ms에 획득한다.
+  // 반경 100px에서 몸체가 닿을 때까지 (100 - 20 - 6)px를 700px/초로 이동하므로 약 106ms에 획득한다. 0.1초에는 70px 이동한 상태다.
+  assert.equal(CFG.expOrb.pullSpeed, 700);
   const results = [10, 20, 50].map(run);
   for (const result of results) {
-    assert.ok(Math.abs(result.x - (1500 + 100 - 45)) < 1e-9);
+    assert.ok(Math.abs(result.x - (1500 + 100 - 70)) < 1e-9);
     assert.deepEqual([result.collected, result.experience], [true, 3]);
   }
 });
