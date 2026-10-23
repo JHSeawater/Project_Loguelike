@@ -1,4 +1,4 @@
-export type EnemyKind = 'soldier' | 'knight' | 'paladin' | 'archer' | 'mage' | 'zealot' | 'crossbowman' | 'priest';
+export type EnemyKind = 'soldier' | 'knight' | 'paladin' | 'archer' | 'mage' | 'zealot' | 'crossbowman' | 'priest' | 'commander';
 export type CharacterId = 'warlock' | 'deathKnight';
 
 export const BATTLE_CONFIG = {
@@ -50,7 +50,27 @@ export const ENEMY_STATS: Record<EnemyKind, EnemyStats> = {
     shotSpeed: 500 },
   priest: { name: '사제', width: 30, height: 40, hp: 25, damage: 0, speed: 100, range: 240, attackMs: 3000, ranged: true, color: 0xe58fb8, exp: 2.5,
     heal: { radius: 160, amount: 10 } },
+  // 보스. 일반 생성에는 나오지 않고 BOSS_CONFIG에 따라 등장한다.
+  commander: { name: '성기사단장', width: 70, height: 90, hp: 1800, damage: 30, speed: 70, range: 40, attackMs: 0, ranged: false, color: 0x8c9099, exp: 30 },
 };
+
+export type BossAction = 'brand' | 'cross' | 'rally' | 'aegis';
+
+// 성기사단장의 등장과 행동. 범위 공격은 경고 시간이 끝나는 순간 범위에 닿은 아군에게 한 번 피해를 준다.
+export const BOSS_CONFIG = {
+  kind: 'commander',
+  at: 300_000,
+  strokeColor: 0xe0b84a,
+  // 등장 후 첫 행동까지, 이후 행동 사이의 간격. 행동은 cycle 순서대로 반복한다.
+  firstActionMs: 4000,
+  everyMs: 4000,
+  cycle: ['brand', 'cross', 'rally', 'brand', 'cross', 'aegis'] as readonly BossAction[],
+  brand: { radius: 100, warnMs: 1000, damage: 35 },
+  // 보스 중심에서 상하좌우로 뻗는 십자. 경고하는 동안 보스는 멈춘다.
+  cross: { width: 60, length: 500, warnMs: 1200, damage: 30 },
+  rally: { kind: 'soldier', count: 4, spread: 90 },
+  aegis: { durationMs: 5000, reducePercent: 70 },
+} as const;
 
 export interface SpawnStage {
   // 이 단계가 시작되는 게임 시간(ms). 일시정지 시간은 게임 시간에 포함되지 않는다.

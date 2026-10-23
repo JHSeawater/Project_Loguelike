@@ -23,6 +23,7 @@ const only = (battle, keep) => {
   if (keep !== 'regular') battle['nextSpawnAt'] = Infinity;
   if (keep !== 'group') battle['nextGroupAt'] = Infinity;
   if (keep !== 'ring') battle['nextRingAt'] = Infinity;
+  if (keep !== 'boss') battle['nextBossAt'] = Infinity;
   return battle;
 };
 const legalSpawn = (battle, enemy, view = VIEW) => {
@@ -155,10 +156,14 @@ test('encircling waves place 16 soldiers around the view from 2:30 and every 2:3
     assert.ok(gap > 0 && gap < 2, `gap ${gap}`);
   }
   assert.deepEqual(quadrants, [4, 4, 4, 4]);
-  // 다음 웨이브는 5:00, 그다음은 7:30이다. 그 사이에는 다시 나오지 않는다.
+  // 다음 웨이브는 5:00이지만 보스가 등장하는 회차라 건너뛰고, 7:30과 10:00에 나온다.
   step(battle, 10_000);
   assert.equal(battle.enemies.length, 16);
-  for (const due of [300_000, 450_000]) {
+  battle.enemies = [];
+  battle.time = 299_980;
+  step(battle, 40);
+  assert.equal(battle.enemies.length, 0, 'skipped at 5:00');
+  for (const due of [450_000, 600_000]) {
     // 앞 웨이브의 적을 치워 같은 자리에 다시 놓을 수 있게 한다.
     battle.enemies = [];
     battle.time = due - 40;

@@ -2,8 +2,8 @@ import Phaser from 'phaser';
 import { decorateWorld } from './world-art';
 import { createDungeon } from './dungeon';
 import { getFootDepth } from './render-depth';
-import { Battle } from './battle';
-import { BATTLE_CONFIG, CHARACTER_STATS, ENEMY_STATS, SKILL_CONFIG, type CharacterId } from './battle-config';
+import { Battle, crossArms } from './battle';
+import { BATTLE_CONFIG, BOSS_CONFIG, CHARACTER_STATS, ENEMY_STATS, SKILL_CONFIG, type CharacterId } from './battle-config';
 import { experienceToNextLevel } from './experience';
 import { REWARDS, type RewardDef, type RewardId } from './rewards';
 import { CharacterSelectScene, FONT, INPUT_DELAY_MS, TitleScene } from './menu-scenes';
@@ -21,6 +21,8 @@ class GameScene extends Phaser.Scene {
   private shotViews = new Map<number, Phaser.GameObjects.Rectangle>();
   private orbViews = new Map<number, Phaser.GameObjects.Rectangle>();
   private effectViews = new Map<number, Phaser.GameObjects.Arc>();
+  private hazardViews = new Map<number, Phaser.GameObjects.Graphics>();
+  private aegisView?: Phaser.GameObjects.Arc;
   private status!: Phaser.GameObjects.Text;
   private healthFill!: Phaser.GameObjects.Rectangle;
   private expFill!: Phaser.GameObjects.Rectangle;
@@ -52,6 +54,8 @@ class GameScene extends Phaser.Scene {
     this.shotViews = new Map();
     this.orbViews = new Map();
     this.effectViews = new Map();
+    this.hazardViews = new Map();
+    this.aegisView = undefined;
     this.shownGameOver = false;
     this.choiceViews = [];
     this.shownChoices = [];
@@ -142,7 +146,10 @@ class GameScene extends Phaser.Scene {
       liveEnemies.add(enemy.id);
       let view = this.enemyViews.get(enemy.id);
       if (!view) {
-        view = this.add.rectangle(0, 0, enemy.width, enemy.height, ENEMY_STATS[enemy.kind].color).setStrokeStyle(2, 0x222823);
+        // 보스는 금색 테두리로 다른 적과 구분한다.
+        const boss = enemy.kind === BOSS_CONFIG.kind;
+        view = this.add.rectangle(0, 0, enemy.width, enemy.height, ENEMY_STATS[enemy.kind].color)
+          .setStrokeStyle(boss ? 3 : 2, boss ? BOSS_CONFIG.strokeColor : 0x222823);
         this.enemyViews.set(enemy.id, view);
       }
       view.setPosition(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2).setDepth(getFootDepth(enemy));
@@ -151,6 +158,33 @@ class GameScene extends Phaser.Scene {
     for (const [id, view] of this.enemyViews) {
       if (!liveEnemies.has(id)) { view.destroy(); this.enemyViews.delete(id); }
     }
+    // 보스 범위 공격의 경고는 판정 범위 그대로 그리고, 피해 시점이 다가올수록 진하게 한다. 몸체 위, 투사체 아래에 그린다.
+    const liveHazards = new Set<number>();
+    for (const hazard of battle.hazards) {
+      liveHazards.add(hazard.id);
+      let view = this.hazardViews.get(hazard.id);
+      if (!view) {
+        view = this.add.graphics().setDepth(9000);
+        this.hazardViews.set(hazard.id, view);
+      }
+      const progress = Math.min(1, (battle.time - hazard.castAt) / (hazard.hitAt - hazard.castAt));
+      view.clear().fillStyle(0xe04848, 0.12 + 0.3 * progress).lineStyle(2, 0xe04848, 0.85);
+      if (hazard.kind === 'brand') {
+        view.fillCircle(hazard.x, hazard.y, BOSS_CONFIG.brand.radius).strokeCircle(hazard.x, hazard.y, BOSS_CONFIG.brand.radius);
+      } else {
+        for (const arm of crossArms(hazard)) view.fillRect(arm.x, arm.y, arm.width, arm.height).strokeRect(arm.x, arm.y, arm.width, arm.height);
+      }
+    }
+    for (const [id, view] of this.hazardViews) {
+      if (!liveHazards.has(id)) { view.destroy(); this.hazardViews.delete(id); }
+    }
+    // 신성 방벽이 유지되는 동안 보스 주위에 금색 원을 표시한다.
+    const boss = battle.boss;
+    if (boss && boss.hp > 0 && battle.time < battle.bossGuardUntil) {
+      this.aegisView ??= this.add.circle(0, 0, 1, BOSS_CONFIG.strokeColor, 0.12).setStrokeStyle(3, BOSS_CONFIG.strokeColor).setDepth(9001);
+      this.aegisView.setPosition(boss.x + boss.width / 2, boss.y + boss.height / 2)
+        .setRadius(Math.hypot(boss.width, boss.height) / 2 + 8).setVisible(true);
+    } else this.aegisView?.setVisible(false);
     const liveShots = new Set<number>();
     for (const shot of battle.projectiles) {
       liveShots.add(shot.id);

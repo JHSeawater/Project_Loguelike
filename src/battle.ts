@@ -1,6 +1,6 @@
 import { moveAndSlide, type Box } from './collision.ts';
-import { BATTLE_CONFIG as CFG, CHARACTER_STATS, ENEMY_STATS, SKILL_CONFIG as SKILL, SPAWN_PATTERNS, SPAWN_STAGES, SPAWN_WEIGHTS,
-  type CharacterId, type EnemyKind, type SpawnStage } from './battle-config.ts';
+import { BATTLE_CONFIG as CFG, BOSS_CONFIG as BOSS, CHARACTER_STATS, ENEMY_STATS, SKILL_CONFIG as SKILL, SPAWN_PATTERNS, SPAWN_STAGES,
+  SPAWN_WEIGHTS, type CharacterId, type EnemyKind, type SpawnStage } from './battle-config.ts';
 import { center, centerInView, contains, distanceSquared, edgeDistance, expand, overlaps, segmentHit, type Point } from './battle-geometry.ts';
 import { Navigation } from './navigation.ts';
 import { addExperience } from './experience.ts';
@@ -50,6 +50,30 @@ export interface AttackEffect {
   y: number;
   radius: number;
   at: number;
+}
+
+// 보스 범위 공격의 경고. (x, y)는 낙인 원과 십자의 중심이며, hitAt에 범위에 닿은 아군에게 한 번 피해를 준다.
+export interface Hazard {
+  id: number;
+  kind: 'brand' | 'cross';
+  x: number;
+  y: number;
+  castAt: number;
+  hitAt: number;
+}
+
+// 성광 십자의 가로·세로 팔. 판정과 표시가 같은 사각형을 쓴다.
+export function crossArms(hazard: Point): [Box, Box] {
+  const { width, length } = BOSS.cross;
+  return [{ x: hazard.x - length, y: hazard.y - width / 2, width: length * 2, height: width },
+    { x: hazard.x - width / 2, y: hazard.y - length, width, height: length * 2 }];
+}
+
+// 범위에 몸체가 닿았는지 판정한다. 경계에 정확히 닿는 경우도 포함한다.
+export function hazardTouches(hazard: Hazard, body: Box): boolean {
+  if (hazard.kind === 'brand') return circleTouches(hazard, BOSS.brand.radius, body);
+  return crossArms(hazard).some((arm) => body.x <= arm.x + arm.width && body.x + body.width >= arm.x
+    && body.y <= arm.y + arm.height && body.y + body.height >= arm.y);
 }
 
 export interface ExpOrb extends Box {
@@ -138,6 +162,11 @@ export class Battle {
   surgeUntil = -Infinity;
   // 선택지가 열려 있는 동안 전투 전체가 일시정지된다.
   choices: RewardId[] = [];
+  // 등장한 보스. 처치된 뒤에도 남겨 두어 표시에서 처치 여부를 알 수 있다.
+  boss: Enemy | null = null;
+  // 보스 범위 공격의 경고 목록과 신성 방벽이 끝나는 게임 시간.
+  hazards: Hazard[] = [];
+  bossGuardUntil = -Infinity;
   private pendingLevelUps = 0;
   // 경험치 배율로 생긴 1 미만의 경험치를 백분율 단위로 이월한다.
   private expCarry = 0;
@@ -154,6 +183,12 @@ export class Battle {
   private nextSpawnAt = 0;
   private nextGroupAt: number = SPAWN_PATTERNS.zealotGroup.from;
   private nextRingAt: number = SPAWN_PATTERNS.ring.from;
+  // 보스가 등장하면 Infinity가 되어 다시 등장하지 않는다.
+  private nextBossAt: number = BOSS.at;
+  private nextBossActionAt = Infinity;
+  private bossActionIndex = 0;
+  // 성광 십자를 경고하는 동안 보스는 멈춘다.
+  private bossCastUntil = -Infinity;
   private lastPlayerAttackAt = -Infinity;
   private pathBudget = 0;
   // 현재 단계가 시작된 게임 시간. 주기 동작이 이번 단계 안에서 준비됐는지 판단한다.
@@ -178,11 +213,19 @@ export class Battle {
     this.spawning = options.spawning ?? true;
   }
 
+  // 최대 적 수에 세는 적. 보스는 포함하지 않는다.
+  private regularCount(): number {
+    let count = 0;
+    for (const enemy of this.enemies) if (enemy.kind !== BOSS.kind) count++;
+    return count;
+  }
+
   // near가 있으면 그 지점 주변(무리 생성), 없으면 화면 주변 550px 범위에서 무작위로 자리를 찾는다.
-  spawnEnemy(kind: EnemyKind, view: Box, near?: Point): Enemy | null {
-    if (this.enemies.length >= stageAt(this.time).max || this.gameOver) return null;
+  // 보스는 최대 적 수와 관계없이 생성하고, onScreen이면 화면 밖 규칙 없이 near 주변에 둔다(보스의 소환).
+  spawnEnemy(kind: EnemyKind, view: Box, near?: Point, onScreen = false): Enemy | null {
+    if (this.gameOver || (kind !== BOSS.kind && this.regularCount() >= stageAt(this.time).max)) return null;
     const { width, height } = ENEMY_STATS[kind];
-    const spread = SPAWN_PATTERNS.zealotGroup.spread;
+    const spread = onScreen ? BOSS.rally.spread : SPAWN_PATTERNS.zealotGroup.spread;
     const area = near ? { x: near.x - spread, y: near.y - spread, width: spread * 2, height: spread * 2 } : expand(view, 550);
     const left = Math.max(CFG.world.x, area.x);
     const top = Math.max(CFG.world.y, area.y);
@@ -191,14 +234,14 @@ export class Battle {
     if (right < left || bottom < top) return null;
     for (let attempt = 0; attempt < 120; attempt++) {
       const body = { x: left + this.random() * (right - left), y: top + this.random() * (bottom - top), width, height };
-      if (this.canSpawnAt(body, view)) return this.addEnemy(kind, body);
+      if (this.canSpawnAt(body, view, onScreen)) return this.addEnemy(kind, body);
     }
     return null;
   }
 
-  // 화면 밖·월드 안·장애물 밖이며 살아 있는 몸체와 겹치지 않는 자리인지 확인한다.
-  private canSpawnAt(body: Box, view: Box): boolean {
-    return contains(CFG.world, body) && !overlaps(body, expand(view, CFG.spawnMargin))
+  // 화면 밖·월드 안·장애물 밖이며 살아 있는 몸체와 겹치지 않는 자리인지 확인한다. onScreen이면 화면 밖 조건을 뺀다.
+  private canSpawnAt(body: Box, view: Box, onScreen = false): boolean {
+    return contains(CFG.world, body) && (onScreen || !overlaps(body, expand(view, CFG.spawnMargin)))
       && !this.obstacles.some((obstacle) => overlaps(body, obstacle))
       && ![...this.allies, ...this.enemies].some((actor) => actor.hp > 0 && overlaps(body, actor));
   }
@@ -219,7 +262,7 @@ export class Battle {
     const halfX = view.width / 2 + CFG.spawnMargin + width / 2 + 1;
     const halfY = view.height / 2 + CFG.spawnMargin + height / 2 + 1;
     for (let i = 0; i < count; i++) {
-      if (this.enemies.length >= stageAt(this.time).max) return;
+      if (this.regularCount() >= stageAt(this.time).max) return;
       const angle = i / count * Math.PI * 2;
       const dx = Math.cos(angle), dy = Math.sin(angle);
       const reach = Math.min(Math.abs(dx) > 1e-9 ? halfX / Math.abs(dx) : Infinity, Math.abs(dy) > 1e-9 ? halfY / Math.abs(dy) : Infinity);
@@ -231,8 +274,17 @@ export class Battle {
     }
   }
 
-  // 시간 단계별 일반 생성과 광신도 무리·포위 웨이브를 처리한다.
+  // 시간 단계별 일반 생성과 광신도 무리·포위 웨이브, 보스 등장을 처리한다.
   private spawnWaves(view: Box): void {
+    // 보스는 자리가 없으면 다음 단계에 다시 시도한다.
+    if (this.time >= this.nextBossAt) {
+      const boss = this.spawnEnemy(BOSS.kind, view);
+      if (boss) {
+        this.boss = boss;
+        this.nextBossAt = Infinity;
+        this.nextBossActionAt = this.time + BOSS.firstActionMs;
+      }
+    }
     const stage = stageAt(this.time);
     if (this.time >= this.nextSpawnAt) {
       for (let i = 0; i < stage.count; i++) this.spawnEnemy(pickSpawnKind(this.time, this.random), view);
@@ -245,9 +297,40 @@ export class Battle {
       for (let i = 1; leader && i < group.count; i++) this.spawnEnemy('zealot', view, center(leader));
     }
     if (this.time >= this.nextRingAt) {
+      const due = this.nextRingAt;
       this.nextRingAt += SPAWN_PATTERNS.ring.everyMs;
-      this.spawnRing(view);
+      // 보스가 등장하는 회차의 포위 웨이브는 건너뛴다.
+      if (due !== BOSS.at) this.spawnRing(view);
     }
+  }
+
+  // 보스 행동: 정해진 간격마다 순서대로 범위 공격 경고, 소집, 방벽을 쓴다.
+  private bossAct(boss: Enemy, target: Actor, view: Box): void {
+    if (this.time < this.nextBossActionAt) return;
+    this.nextBossActionAt = this.intervalFrom(this.nextBossActionAt) + BOSS.everyMs;
+    const action = BOSS.cycle[this.bossActionIndex++ % BOSS.cycle.length];
+    if (action === 'brand') this.addHazard('brand', center(target), BOSS.brand.warnMs);
+    else if (action === 'cross') {
+      this.addHazard('cross', center(boss), BOSS.cross.warnMs);
+      this.bossCastUntil = this.time + BOSS.cross.warnMs;
+    } else if (action === 'rally') {
+      for (let i = 0; i < BOSS.rally.count; i++) this.spawnEnemy(BOSS.rally.kind, view, center(boss), true);
+    } else this.bossGuardUntil = this.time + BOSS.aegis.durationMs;
+  }
+
+  private addHazard(kind: Hazard['kind'], point: Point, warnMs: number): void {
+    this.hazards.push({ id: this.nextId++, kind, x: point.x, y: point.y, castAt: this.time, hitAt: this.time + warnMs });
+  }
+
+  // 경고 시간이 끝난 범위 공격은 그 순간 범위에 닿은 아군에게 한 번 피해를 주고 사라진다. 장애물은 막지 않는다.
+  private resolveHazards(): void {
+    if (!this.hazards.length) return;
+    this.hazards = this.hazards.filter((hazard) => {
+      if (this.time < hazard.hitAt) return true;
+      const damage = hazard.kind === 'brand' ? BOSS.brand.damage : BOSS.cross.damage;
+      for (const ally of this.allies) if (ally.hp > 0 && hazardTouches(hazard, ally)) this.dealDamage(ally, damage);
+      return false;
+    });
   }
 
   // 주기 동작의 다음 간격을 셀 기준 시각. 이번 단계 안에서 준비됐으면 준비된 시각부터 세어, 프레임 간격이
@@ -260,10 +343,14 @@ export class Battle {
   dealDamage(target: Actor, damage: number): boolean {
     if (this.gameOver || target.hp <= 0 || !target.attackable) return false;
     if (target === this.player && this.time - target.lastHitAt < CFG.player.hurtMs) return false;
+    // 신성 방벽이 유지되는 동안 보스가 받는 피해를 줄인다.
+    if (target === this.boss && this.time < this.bossGuardUntil) damage = Math.round(damage * (100 - BOSS.aegis.reducePercent) / 100);
     target.hp = Math.max(0, target.hp - damage);
     target.lastHitAt = this.time;
     // 살아 있던 적이 이 피해로 죽을 때만 구슬을 만들므로 처치 주체와 관계없이 한 번만 생긴다.
     if (target.hp === 0 && this.enemies.includes(target as Enemy)) this.dropOrb(target as Enemy);
+    // 보스가 죽으면 아직 끝나지 않은 범위 공격은 사라진다.
+    if (target.hp === 0 && target === this.boss) this.hazards = [];
     if (target === this.player && target.hp === 0) {
       this.gameOver = true;
       for (const ally of this.allies) ally.hp = 0;
@@ -459,7 +546,7 @@ export class Battle {
     enemy.x = moved.x; enemy.y = moved.y;
   }
 
-  private updateEnemies(dt: number): void {
+  private updateEnemies(dt: number, view: Box): void {
     this.pathBudget = CFG.pathBudget;
     for (const enemy of this.enemies) {
       if (enemy.hp <= 0 || this.gameOver) continue;
@@ -472,7 +559,8 @@ export class Battle {
         enemy.nextThinkAt = this.time + CFG.targetMs;
       }
       if (!target) { enemy.holding = false; continue; }
-      this.moveEnemy(enemy, target, dt);
+      if (enemy === this.boss) this.bossAct(enemy, target, view);
+      if (enemy !== this.boss || this.time >= this.bossCastUntil) this.moveEnemy(enemy, target, dt);
       const stats = ENEMY_STATS[enemy.kind];
       if (stats.heal) {
         if (this.time >= enemy.nextAttackAt) {
@@ -593,7 +681,8 @@ export class Battle {
     }
     const view = viewForPlayer(this.player);
     if (this.spawning) this.spawnWaves(view);
-    this.updateEnemies(dt);
+    this.updateEnemies(dt, view);
+    this.resolveHazards();
     if (this.gameOver) return;
     const attackReadyAt = this.lastPlayerAttackAt + power.attackMs;
     if (this.time >= attackReadyAt) {
