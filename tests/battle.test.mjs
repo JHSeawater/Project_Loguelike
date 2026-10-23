@@ -542,17 +542,19 @@ test('attack speed rewards shorten the auto attack interval', () => {
 test('max health rewards raise current health and healing never exceeds max health', () => {
   const battle = new Battle([], { spawning: false });
   battle.player.hp = 50;
+  // 최대 체력 강화는 시작값 100의 10%씩: 1회 110, 10회 200.
   battle.applyReward('maxHp');
-  assert.deepEqual([battle.player.hp, battle.player.maxHp], [70, 120]);
+  assert.deepEqual([battle.player.hp, battle.player.maxHp], [60, 110]);
+  // 체력 회복은 최대 체력 110의 30% = 33.
   battle.applyReward('heal');
-  assert.equal(battle.player.hp, 106);
+  assert.equal(battle.player.hp, 93);
   battle.applyReward('heal');
-  assert.equal(battle.player.hp, 120);
+  assert.equal(battle.player.hp, 110);
   for (let i = 0; i < 9; i++) battle.applyReward('maxHp');
-  assert.deepEqual([battle.player.hp, battle.player.maxHp], [300, 300]);
+  assert.deepEqual([battle.player.hp, battle.player.maxHp], [200, 200]);
   battle.player.hp = 1;
   battle.applyReward('heal');
-  assert.equal(battle.player.hp, 91);
+  assert.equal(battle.player.hp, 61);
 });
 
 test('a level up in the same frame as player death keeps the game over without a choice window', () => {

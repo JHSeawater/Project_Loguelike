@@ -1,11 +1,11 @@
 import { moveAndSlide, type Box } from './collision.ts';
-import { BATTLE_CONFIG as CFG, BOSS_CONFIG as BOSS, CHARACTER_STATS, ENEMY_STATS, SKILL_CONFIG as SKILL, SPAWN_PATTERNS, SPAWN_STAGES,
-  SPAWN_WEIGHTS, type CharacterId, type EnemyKind, type SpawnStage } from './battle-config.ts';
+import { BATTLE_CONFIG as CFG, BLESS_CONFIG as BLESS, BOSS_CONFIG as BOSS, CHARACTER_STATS, ENEMY_STATS, SKILL_CONFIG as SKILL, SPAWN_PATTERNS,
+  SPAWN_STAGES, SPAWN_WEIGHTS, type CharacterId, type EnemyKind, type SpawnStage } from './battle-config.ts';
 import { center, centerInView, contains, distanceSquared, edgeDistance, expand, overlaps, segmentHit, type Point } from './battle-geometry.ts';
 import { Navigation } from './navigation.ts';
 import { addExperience } from './experience.ts';
-import { BOSS_REWARD, REWARD_STEP, bossRewardPool, emptyStacks, maxHpFor, missingSpecialSkills, rewardPool, rollChoices, skillStatsFor,
-  statsFor, type PlayerStats, type RewardId, type SkillId, type SkillStats } from './rewards.ts';
+import { BLESS_IDS, BOSS_REWARD, REWARD_STEP, bossRewardPool, emptyStacks, maxHpFor, missingSpecialSkills, rewardPool, rollChoices,
+  skillStatsFor, statsFor, type BlessId, type PlayerStats, type RewardId, type SkillId, type SkillStats } from './rewards.ts';
 
 export interface Actor extends Box {
   id: number;
@@ -160,9 +160,9 @@ export class Battle {
   skills: SkillStats;
   // 워록의 마력 폭주가 끝나는 게임 시간. 보상을 고를 때마다 이 시점부터 다시 계산한다.
   surgeUntil = -Infinity;
-  // 선택지가 열려 있는 동안 전투 전체가 일시정지된다. 보스 보상 선택창은 레벨업 선택창보다 먼저 연다.
+  // 선택지가 열려 있는 동안 전투 전체가 일시정지된다. 보스 보상 → 가호 → 레벨업 선택창 순서로 연다.
   choices: RewardId[] = [];
-  choiceSource: 'level' | 'boss' = 'level';
+  choiceSource: 'level' | 'boss' | 'blessing' = 'level';
   // 보스 보상 '직업 특수 특기'로 얻을 특수 특기. 보스 보상 선택창을 열 때 아직 없는 것 중에서 무작위로 정한다.
   bossSpecial: SkillId | null = null;
   // 피의 광란: 처치한 뒤 다음 1회 휘두르기의 공격력이 커진다. 여러 번 처치해도 한 번만 쌓인다.
@@ -177,12 +177,24 @@ export class Battle {
   bossGuardUntil = -Infinity;
   private pendingLevelUps = 0;
   private pendingBossRewards = 0;
+  private pendingBlessings = 0;
+  private nextBlessAt: number = BLESS.everyMs;
   // 경험치 배율로 생긴 1 미만의 경험치를 백분율 단위로 이월한다.
   private expCarry = 0;
 
   // 아직 보상을 고르지 않은 레벨업 수. 현재 열린 선택창을 포함한다.
   get pendingChoices(): number {
     return this.pendingLevelUps;
+  }
+
+  // 가호로 더해진 적 능력치 배율(백분율). 기본값 기준으로 가호마다 더한다.
+  blessPercent(id: BlessId): number {
+    return 100 + this.rewardStacks[id] * BLESS.percent;
+  }
+
+  // 가호 '흉포한 적'을 적용한 적의 피해. 정수로 반올림한다.
+  private enemyDamage(base: number): number {
+    return Math.round(base * this.blessPercent('blessDamage') / 100);
   }
 
   // 배리어의 최대치. '성스러운 방벽'을 얻은 뒤 현재 최대 체력의 일정 비율이다.
@@ -260,8 +272,10 @@ export class Battle {
       && ![...this.allies, ...this.enemies].some((actor) => actor.hp > 0 && overlaps(body, actor));
   }
 
+  // 시간에 따른 체력 증가와 가호 '강인한 적'을 더한 체력으로 만든다. 이미 있는 적의 체력은 바꾸지 않는다.
   private addEnemy(kind: EnemyKind, body: Box): Enemy {
-    const enemy = createEnemy(this.nextId++, kind, body.x, body.y, this.time, hpPercentAt(this.time));
+    const hpPercent = hpPercentAt(this.time) + this.blessPercent('blessHp') - 100;
+    const enemy = createEnemy(this.nextId++, kind, body.x, body.y, this.time, hpPercent);
     enemy.nextThinkAt += enemy.id % 5 * 50;
     this.enemies.push(enemy);
     return enemy;
@@ -342,7 +356,7 @@ export class Battle {
     if (!this.hazards.length) return;
     this.hazards = this.hazards.filter((hazard) => {
       if (this.time < hazard.hitAt) return true;
-      const damage = hazard.kind === 'brand' ? BOSS.brand.damage : BOSS.cross.damage;
+      const damage = this.enemyDamage(hazard.kind === 'brand' ? BOSS.brand.damage : BOSS.cross.damage);
       for (const ally of this.allies) if (ally.hp > 0 && hazardTouches(hazard, ally)) this.dealDamage(ally, damage);
       return false;
     });
@@ -435,7 +449,7 @@ export class Battle {
     this.orbs = remaining;
   }
 
-  // 보스 보상 선택창을 먼저 열고, 이어서 오른 레벨 수만큼 선택창을 순서대로 연다. 매번 그 시점의 보상 상태로 새로 구성한다.
+  // 보스 보상 선택창, 가호 선택창을 먼저 열고, 이어서 오른 레벨 수만큼 선택창을 순서대로 연다. 매번 그 시점의 보상 상태로 새로 구성한다.
   private openNextChoices(): void {
     if (this.gameOver || this.choices.length) return;
     if (this.pendingBossRewards > 0) {
@@ -443,6 +457,9 @@ export class Battle {
       this.choices = rollChoices(this.rewardStacks, BOSS_REWARD.choices, this.random, bossRewardPool(this.rewardStacks, this.character));
       const missing = missingSpecialSkills(this.rewardStacks, this.character);
       this.bossSpecial = this.choices.includes('bossSkill') ? missing[Math.min(missing.length - 1, Math.floor(this.random() * missing.length))] : null;
+    } else if (this.pendingBlessings > 0) {
+      this.choiceSource = 'blessing';
+      this.choices = [...BLESS_IDS];
     } else if (this.pendingLevelUps > 0) {
       this.choiceSource = 'level';
       this.choices = rollChoices(this.rewardStacks, this.stats.choiceCount, this.random, rewardPool(this.character));
@@ -455,7 +472,8 @@ export class Battle {
     this.choices = [];
     const levelUp = this.choiceSource === 'level';
     if (levelUp) this.pendingLevelUps--;
-    else this.pendingBossRewards--;
+    else if (this.choiceSource === 'boss') this.pendingBossRewards--;
+    else this.pendingBlessings--;
     this.applyReward(id);
     // 마력 폭주: 레벨업 보상을 고른 시점부터 지속 시간을 다시 센다. 연속 레벨업에서도 누적하지 않는다.
     // 보상을 적용한 뒤에 정하므로 마력 조정을 고른 순간의 폭주부터 늘어난 지속 시간을 쓴다.
@@ -579,7 +597,8 @@ export class Battle {
     const dx = waypoint.x - from.x, dy = waypoint.y - from.y;
     const length = Math.hypot(dx, dy);
     if (length < 0.001) return;
-    const distance = Math.min(length, stats.speed * dt / 1000);
+    // 가호 '날랜 적'은 이미 있는 적에게도 바로 적용된다.
+    const distance = Math.min(length, stats.speed * this.blessPercent('blessSpeed') / 100 * dt / 1000);
     // 적끼리는 서로 몸체 위쪽 통과 영역을 뺀 아래쪽끼리만 막는다. 다른 적의 막는 범위를 그 적의 통과 영역만큼
     // 위에서, 이 적의 통과 영역만큼 아래에서 줄이면 두 아래쪽 몸체가 겹칠 때만 부딪힌다.
     // 사거리 안에서 멈춘 원거리 적·사제는 막지 않아, 그 뒤의 적이 줄을 지나 다가갈 수 있다.
@@ -633,12 +652,12 @@ export class Battle {
         }
       } else if (stats.ranged) {
         if (distanceSquared(enemy, target) <= stats.range ** 2 && this.time >= enemy.nextAttackAt) {
-          this.fire(enemy, target, 'enemy', stats.damage, stats.color, stats.shotSpeed ?? CFG.enemyShot.speed);
+          this.fire(enemy, target, 'enemy', this.enemyDamage(stats.damage), stats.color, stats.shotSpeed ?? CFG.enemyShot.speed);
           enemy.nextAttackAt = this.intervalFrom(enemy.nextAttackAt) + stats.attackMs;
         }
       } else if (edgeDistance(enemy, target) <= 0.75
         && !this.obstacles.some((obstacle) => segmentHit(center(enemy), center(target), obstacle) !== null)) {
-        this.dealDamage(target, stats.damage);
+        this.dealDamage(target, this.enemyDamage(stats.damage));
       }
     }
   }
@@ -766,6 +785,11 @@ export class Battle {
     // 같은 프레임에 플레이어가 사망하면 구슬 획득과 레벨업 선택이 일어나지 않는다.
     if (this.gameOver) return;
     this.updateOrbs(dt);
+    // 가호는 게임 시간 2분마다 하나씩 고른다. 선택 중에는 게임 시간이 멈추므로 밀리지 않는다.
+    if (this.time >= this.nextBlessAt) {
+      this.pendingBlessings++;
+      this.nextBlessAt += BLESS.everyMs;
+    }
     this.openNextChoices();
   }
 }

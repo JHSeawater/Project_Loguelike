@@ -128,6 +128,9 @@ export const CHARACTER_STATS: Record<CharacterId, CharacterStats> = {
   deathKnight: { name: '데스 나이트', hp: 160, damage: 16, speed: 230, attackMs: 800, attack: 'swing', swingRadius: 100, killHeal: 1, color: 0xe0d8c3 },
 };
 
+// 가호: 게임 시간 everyMs마다 가호 하나를 고른다. 고른 가호마다 적의 해당 능력치가 기본값의 percent%씩 더해진다(복리 아님).
+export const BLESS_CONFIG = { everyMs: 120_000, percent: 10 } as const;
+
 // 직업 패시브와 특기의 초기값. 플레이 테스트로 조정한다.
 export const SKILL_CONFIG = {
   surge: { durationMs: 5000, percent: 20 },
@@ -141,7 +144,5 @@ export const SKILL_CONFIG = {
   // 피의 광란: 처치 뒤 다음 1회 휘두르기의 공격력에 곱한다.
   bloodFrenzy: { damageMultiplier: 2 },
   deathLord: { percent: 20 },
-  // 특수 특기가 선택지에 뽑힐 가중치. 다른 후보는 1이다.
-  specialWeight: 0.1,
   effectMs: 150,
 } as const;

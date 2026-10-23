@@ -19,11 +19,13 @@ const quietBattle = (options = {}) => {
   return battle;
 };
 // 지정한 생성 패턴만 남긴다. 테스트 준비를 위해 내부 예약 시각을 직접 조정한다.
+// 가호 선택창은 게임을 멈추므로 생성 검사에서는 끈다(가호는 tests/blessings.test.mjs에서 검사한다).
 const only = (battle, keep) => {
   if (keep !== 'regular') battle['nextSpawnAt'] = Infinity;
   if (keep !== 'group') battle['nextGroupAt'] = Infinity;
   if (keep !== 'ring') battle['nextRingAt'] = Infinity;
   if (keep !== 'boss') battle['nextBossAt'] = Infinity;
+  battle['nextBlessAt'] = Infinity;
   return battle;
 };
 const legalSpawn = (battle, enemy, view = VIEW) => {

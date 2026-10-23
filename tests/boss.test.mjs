@@ -31,6 +31,8 @@ const ACTIONS = ['brand', 'cross', 'rally', 'brand', 'cross', 'aegis'];
 test('the commander appears once at 5:00 off-screen even with the enemy cap full, and is not counted in the cap', () => {
   const battle = new Battle([], { character: 'deathKnight', random: seeded(3) });
   battle['nextSpawnAt'] = Infinity; battle['nextGroupAt'] = Infinity; battle['nextRingAt'] = Infinity;
+  // 가호 선택창은 게임을 멈추므로 이 검사에서는 끈다.
+  battle['nextBlessAt'] = Infinity;
   // 적이 움직이지 않도록 플레이어를 공격 불가로 두고, 4:00 단계 최대 60마리를 화면 밖 왼쪽 위에 채운다.
   battle.player.attackable = false;
   for (let i = 0; i < 60; i++) battle.enemies.push(createEnemy(1000 + i, 'soldier', 60 + i % 10 * 50, 60 + Math.floor(i / 10) * 50));
@@ -299,9 +301,9 @@ test('the holy barrier absorbs damage before health, keeps the 0.3s hurt cooldow
   assert.equal(battle.barrier, 0);
   run(battle, 20);
   assert.equal(battle.barrier, 15);
-  // 최대 체력이 늘면 배리어 최대치도 늘어난다(120의 15% = 18).
+  // 최대 체력이 늘면 배리어 최대치도 늘어난다(110의 15% = 16.5 → 17).
   battle.applyReward('maxHp');
-  assert.equal(battle.barrierMax, 18);
+  assert.equal(battle.barrierMax, 17);
 });
 
 test('killing the commander cancels pending attacks, drops 30 experience as 60 orbs, and stops its actions', () => {

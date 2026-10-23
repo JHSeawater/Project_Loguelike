@@ -3,15 +3,18 @@ import { decorateWorld } from './world-art';
 import { createDungeon } from './dungeon';
 import { getFootDepth } from './render-depth';
 import { Battle, crossArms } from './battle';
-import { BATTLE_CONFIG, BOSS_CONFIG, CHARACTER_STATS, ENEMY_STATS, SKILL_CONFIG, type CharacterId } from './battle-config';
+import { BATTLE_CONFIG, BLESS_CONFIG, BOSS_CONFIG, CHARACTER_STATS, ENEMY_STATS, SKILL_CONFIG, type CharacterId } from './battle-config';
 import { experienceToNextLevel } from './experience';
-import { REWARDS, type RewardDef, type RewardId } from './rewards';
+import { BLESS_IDS, REWARDS, REWARD_TIERS, type RewardDef, type RewardId, type RewardTier } from './rewards';
 import { CharacterSelectScene, FONT, INPUT_DELAY_MS, TitleScene } from './menu-scenes';
 import './style.css';
 
 const CHOICE_CARD = { width: 220, height: 250, gap: 20, top: 230 };
-// 카드 테두리: 공통 보상, 직업 무한 특기, 특수 특기, 보스 보상을 구분한다.
-const cardStroke = (reward: RewardDef): number => reward.boss ? 0xe8743a : reward.special ? 0xe0b84a : reward.character ? 0x9b7ad8 : 0x5f7a70;
+// 카드 테두리: 레벨업 보상은 등급 색, 보스 보상은 구리색, 가호는 붉은색이다.
+const TIER_COLORS: Record<RewardTier, number> = { common: 0x8a918c, uncommon: 0x5fbf6a, rare: 0x4f8fe0, epic: 0xa66be0 };
+const cardStroke = (reward: RewardDef): number => reward.tier ? TIER_COLORS[reward.tier] : reward.blessing ? 0xd04848 : 0xe8743a;
+// HUD의 누적 가호 표시에 쓰는 짧은 이름.
+const BLESS_LABELS = { blessHp: '체력', blessSpeed: '이동속도', blessDamage: '공격력' } as const;
 // 보스 체력 바는 HUD 패널 오른쪽 위에 둔다.
 const BOSS_BAR = { x: 676, y: 44, width: 576, height: 10 };
 
@@ -29,6 +32,8 @@ class GameScene extends Phaser.Scene {
   private healthFill!: Phaser.GameObjects.Rectangle;
   private expFill!: Phaser.GameObjects.Rectangle;
   private levelText!: Phaser.GameObjects.Text;
+  private hudPanel!: Phaser.GameObjects.Rectangle;
+  private blessText!: Phaser.GameObjects.Text;
   private barrierFill!: Phaser.GameObjects.Rectangle;
   private bossPanel!: Phaser.GameObjects.GameObject[];
   private bossName!: Phaser.GameObjects.Text;
@@ -83,7 +88,10 @@ class GameScene extends Phaser.Scene {
     camera.centerOn(this.player.x, this.player.y);
     camera.startFollow(this.player, true, 1, 1);
 
-    this.add.rectangle(12, 12, 620, 112, 0x101612, 0.9).setOrigin(0).setScrollFactor(0).setDepth(20000);
+    // 가호를 고른 뒤에는 패널을 한 줄 늘려 누적 가호를 표시한다.
+    this.hudPanel = this.add.rectangle(12, 12, 620, 112, 0x101612, 0.9).setOrigin(0).setScrollFactor(0).setDepth(20000);
+    this.blessText = this.add.text(24, 120, '', { fontFamily: FONT, fontSize: '14px', color: '#e08080' })
+      .setScrollFactor(0).setDepth(20001);
     this.status = this.add.text(24, 20, '', { fontFamily: 'Malgun Gothic, sans-serif', fontSize: '17px', color: '#eeeece' })
       .setScrollFactor(0).setDepth(20001);
     this.add.rectangle(24, 50, 180, 10, 0x383d32).setOrigin(0).setScrollFactor(0).setDepth(20001);
@@ -256,6 +264,10 @@ class GameScene extends Phaser.Scene {
     const surgeLeft = battle.surgeUntil - battle.time;
     this.levelText.setText(`Lv ${battle.level}   ${battle.experience}/${need}`
       + (surgeLeft > 0 ? `    마력 폭주 ${(surgeLeft / 1000).toFixed(1)}초` : ''));
+    const blessings = BLESS_IDS.filter((id) => battle.rewardStacks[id] > 0)
+      .map((id) => `${BLESS_LABELS[id]} +${battle.blessPercent(id) - 100}%`);
+    this.blessText.setText(blessings.length ? `가호: 적 ${blessings.join(' · ')}` : '');
+    this.hudPanel.setSize(620, blessings.length ? 132 : 112);
     const barrierMax = battle.barrierMax;
     this.barrierFill.setVisible(barrierMax > 0);
     if (barrierMax > 0) this.barrierFill.setDisplaySize(180 * battle.barrier / barrierMax, 3);
@@ -297,7 +309,10 @@ class GameScene extends Phaser.Scene {
     };
     // HUD 위, 게임 종료 화면 아래에 그린다. 연속 레벨업은 앞선 레벨부터 순서대로 표시한다.
     const rewardLevel = this.battle.level - this.battle.pendingChoices + 1;
+    // 가호 선택창은 몇 번째 가호인지로 그 가호가 나온 게임 시간을 보여 준다.
+    const blessMinutes = (BLESS_IDS.reduce((sum, id) => sum + this.battle.rewardStacks[id], 0) + 1) * BLESS_CONFIG.everyMs / 60_000;
     const title = this.battle.choiceSource === 'boss' ? `${ENEMY_STATS[BOSS_CONFIG.kind].name} 처치 · 보상을 선택하세요`
+      : this.battle.choiceSource === 'blessing' ? `${blessMinutes}:00 · 가호를 선택하세요`
       : `레벨 ${rewardLevel} 달성 · 보상을 선택하세요`;
     fixed(this.add.rectangle(640, 360, 1280, 720, 0x060a08, 0.72), 25000);
     fixed(this.add.text(640, 175, title, {
@@ -318,14 +333,17 @@ class GameScene extends Phaser.Scene {
         .on('pointerout', () => card.setStrokeStyle(2, stroke))
         .on('pointerdown', () => this.pickChoice(index));
       const stacks = this.battle.rewardStacks[id];
-      const stackText = reward.boss ? '보스 보상' : reward.special ? '특수 특기 · 1회 획득'
+      const stackText = reward.special ? '특수 특기 · 1회 획득'
         : Number.isFinite(reward.maxStacks) ? `중첩 ${stacks}/${reward.maxStacks}`
         : reward.character ? `직업 특기 · 중첩 ${stacks}` : id === 'heal' ? '중첩 제한 없음' : `중첩 ${stacks} · 제한 없음`;
+      // 레벨업 보상은 등급 이름을 앞에 붙인다. 보스 보상과 가호는 등급 없이 표시한다.
+      const footer = reward.tier ? `${REWARD_TIERS[reward.tier].name} · ${stackText}`
+        : reward.blessing ? `가호 · 중첩 ${stacks}` : '보스 보상';
       const lines: [number, string, string, string][] = [
         [-95, `[${index + 1}]`, '18px', '#9fd0ff'],
         [-50, reward.name, '21px', '#eeeece'],
         [10, reward.effect, '16px', '#c8d2c0'],
-        [90, stackText, '15px', '#8f9c8a'],
+        [90, footer, '15px', '#8f9c8a'],
       ];
       for (const [offset, text, fontSize, color] of lines) {
         fixed(this.add.text(x, y + offset, text, {

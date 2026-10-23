@@ -357,9 +357,9 @@ test('death lord raises damage, speed and max health by 20% and shortens the att
   battle.player.hp = 100;
   battle.applyReward('deathLord');
   assert.deepEqual([battle.player.hp, battle.player.maxHp], [132, 192]);
-  // 이후 최대 체력 강화도 같은 비율로 적용된다: 160 × 1.2(강화 1회) × 1.2 = 230.4 → 230.
+  // 이후 최대 체력 강화도 같은 비율로 적용된다: 160 × 1.1(강화 1회) × 1.2 = 211.2 → 211.
   battle.applyReward('maxHp');
-  assert.deepEqual([battle.player.hp, battle.player.maxHp], [170, 230]);
+  assert.deepEqual([battle.player.hp, battle.player.maxHp], [151, 211]);
 });
 
 test('level-up choices for each class only come from that class pool', () => {
