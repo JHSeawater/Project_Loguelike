@@ -1,5 +1,5 @@
 export type EnemyKind = 'soldier' | 'knight' | 'paladin' | 'archer' | 'mage' | 'zealot' | 'crossbowman' | 'priest' | 'commander';
-export type CharacterId = 'warlock' | 'deathKnight';
+export type CharacterId = 'warlock' | 'deathKnight' | 'necromancer';
 
 export const BATTLE_CONFIG = {
   world: { x: 50, y: 50, width: 2900, height: 2900 },
@@ -39,20 +39,21 @@ export interface EnemyStats {
   heal?: { radius: number; amount: number };
 }
 
-// 크기·사거리 1은 40px, 원거리 공격 간격은 초 단위다. 기사는 가로형, 성기사는 세로형 몸체를 쓴다.
+// 크기·사거리 1은 40px다. 공격 간격(attackMs)은 근접 적의 접촉 공격, 원거리 적의 발사, 사제의 회복 주기다.
+// 기사는 가로형, 성기사는 세로형 몸체를 쓴다.
 export const ENEMY_STATS: Record<EnemyKind, EnemyStats> = {
-  soldier: { name: '병사', width: 40, height: 40, hp: 25, damage: 10, speed: 110, range: 40, attackMs: 0, ranged: false, color: 0xdb6464, exp: 1 },
-  knight: { name: '기사', width: 80, height: 60, hp: 75, damage: 20, speed: 160, range: 40, attackMs: 0, ranged: false, color: 0x819ce0, exp: 3 },
-  paladin: { name: '성기사', width: 60, height: 80, hp: 130, damage: 25, speed: 75, range: 40, attackMs: 0, ranged: false, color: 0xdfbe5d, exp: 4 },
+  soldier: { name: '병사', width: 40, height: 40, hp: 25, damage: 10, speed: 110, range: 40, attackMs: 800, ranged: false, color: 0xdb6464, exp: 1 },
+  knight: { name: '기사', width: 80, height: 60, hp: 75, damage: 20, speed: 160, range: 40, attackMs: 1000, ranged: false, color: 0x819ce0, exp: 3 },
+  paladin: { name: '성기사', width: 60, height: 80, hp: 130, damage: 25, speed: 75, range: 40, attackMs: 1200, ranged: false, color: 0xdfbe5d, exp: 4 },
   archer: { name: '궁사', width: 30, height: 40, hp: 15, damage: 5, speed: 120, range: 280, attackMs: 5000, ranged: true, color: 0xa7c26b, exp: 1 },
   mage: { name: '마법사', width: 40, height: 40, hp: 20, damage: 10, speed: 100, range: 200, attackMs: 10000, ranged: true, color: 0xbc83d6, exp: 2 },
-  zealot: { name: '광신도', width: 25, height: 30, hp: 12, damage: 6, speed: 250, range: 40, attackMs: 0, ranged: false, color: 0xe08a3c, exp: 0.5 },
+  zealot: { name: '광신도', width: 25, height: 30, hp: 12, damage: 6, speed: 250, range: 40, attackMs: 500, ranged: false, color: 0xe08a3c, exp: 0.5 },
   crossbowman: { name: '석궁병', width: 40, height: 40, hp: 20, damage: 15, speed: 120, range: 320, attackMs: 6000, ranged: true, color: 0x4fb8b0, exp: 2,
     shotSpeed: 500 },
   priest: { name: '사제', width: 30, height: 40, hp: 25, damage: 0, speed: 100, range: 240, attackMs: 3000, ranged: true, color: 0xe58fb8, exp: 2.5,
     heal: { radius: 160, amount: 10 } },
   // 보스. 일반 생성에는 나오지 않고 BOSS_CONFIG에 따라 등장한다.
-  commander: { name: '성기사단장', width: 70, height: 90, hp: 1800, damage: 30, speed: 70, range: 40, attackMs: 0, ranged: false, color: 0x8c9099, exp: 30 },
+  commander: { name: '성기사단장', width: 70, height: 90, hp: 1800, damage: 30, speed: 70, range: 40, attackMs: 1500, ranged: false, color: 0x8c9099, exp: 30 },
 };
 
 export type BossAction = 'brand' | 'cross' | 'rally' | 'aegis';
@@ -124,8 +125,9 @@ export interface CharacterStats {
 
 // 직업별 시작 능력치. 크기 40×40과 피격 간격 0.3초는 모든 직업이 같다.
 export const CHARACTER_STATS: Record<CharacterId, CharacterStats> = {
-  warlock: { name: '워록', hp: 100, damage: 10, speed: 250, attackMs: 500, attack: 'shot', swingRadius: 0, killHeal: 0, color: 0x66ddaa },
-  deathKnight: { name: '데스 나이트', hp: 160, damage: 16, speed: 230, attackMs: 800, attack: 'swing', swingRadius: 100, killHeal: 1, color: 0xe0d8c3 },
+  warlock: { name: '워록', hp: 100, damage: 10, speed: 230, attackMs: 500, attack: 'shot', swingRadius: 0, killHeal: 0, color: 0x66ddaa },
+  deathKnight: { name: '데스 나이트', hp: 160, damage: 16, speed: 250, attackMs: 800, attack: 'swing', swingRadius: 100, killHeal: 1, color: 0xe0d8c3 },
+  necromancer: { name: '네크로맨서', hp: 80, damage: 12, speed: 210, attackMs: 600, attack: 'shot', swingRadius: 0, killHeal: 0, color: 0x6f8f8a },
 };
 
 // 가호: 게임 시간 everyMs마다 가호 하나를 고른다. 고른 가호마다 적의 해당 능력치가 기본값의 percent%씩 더해진다(복리 아님).
@@ -144,5 +146,17 @@ export const SKILL_CONFIG = {
   // 피의 광란: 처치 뒤 다음 1회 휘두르기의 공격력에 곱한다.
   bloodFrenzy: { damageMultiplier: 2 },
   deathLord: { percent: 20 },
+  // 네크로맨서 패시브 '시체 부활': 보스가 아닌 적이 죽으면 chancePercent% 확률로 그 자리에 좀비가 일어난다. 동시에 max마리까지.
+  raise: { chancePercent: 30, max: 8 },
+  // 좀비는 자기 중심 senseRadius 원에 몸체가 닿은 적 중 가장 가까운 적을 쫓아 몸이 닿으면 공격 간격마다 피해를 준다.
+  // 감지한 적이 없으면 플레이어 중심 followRadius 안으로 돌아온다.
+  zombie: { size: 30, hp: 60, damage: 5, speed: 80, attackMs: 1000, senseRadius: 300, followRadius: 150, color: 0x4e7a3e },
+  plague: { percentStep: 5, maxPercent: 70 },
+  corpseBoost: { percent: 20 },
+  // 망자의 군세: 중첩마다 동시에 있을 수 있는 최대 좀비 수에 더한다.
+  legion: { maxStep: 1 },
+  // 전염: 좀비에게 죽은 적의 좀비화 확률에 더한다. 시체 폭발: 좀비가 죽을 때 주변 적에게 플레이어 공격력의 비율만큼 피해.
+  contagion: { percent: 20 },
+  corpseBlast: { radius: 80, damagePercent: 200 },
   effectMs: 150,
 } as const;

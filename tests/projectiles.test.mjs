@@ -54,10 +54,10 @@ test('a shot does not hit a body whose path it never actually shares', () => {
 
 test('shots moving with or against a body hit exactly when the gap between them closes', () => {
   for (const frame of FRAMES) {
-    // 같은 방향: 초당 280px 투사체가 초당 250px로 달아나는 플레이어를 2px 뒤에서 쫓아 66.7ms에 닿는다.
-    assert.equal(fire(enemyShot(1473, 1500, 280, 0), { x: 1, y: 0 }, 60, frame).hp, 100, `chasing 60ms ${frame}ms`);
-    assert.equal(fire(enemyShot(1473, 1500, 280, 0), { x: 1, y: 0 }, 80, frame).hp, 90, `chasing 80ms ${frame}ms`);
-    // 반대 방향: 서로 초당 530px로 가까워진다. 간격 20px은 37.7ms, 30px은 56.6ms에 닿는다.
+    // 같은 방향: 초당 280px 투사체가 초당 230px로 달아나는 워록을 3.5px 뒤에서 쫓아(초당 50px씩 좁혀짐) 70ms에 닿는다.
+    assert.equal(fire(enemyShot(1471.5, 1500, 280, 0), { x: 1, y: 0 }, 60, frame).hp, 100, `chasing 60ms ${frame}ms`);
+    assert.equal(fire(enemyShot(1471.5, 1500, 280, 0), { x: 1, y: 0 }, 80, frame).hp, 90, `chasing 80ms ${frame}ms`);
+    // 반대 방향: 서로 초당 510px로 가까워진다. 간격 20px은 39.2ms, 30px은 58.8ms에 닿는다.
     assert.equal(fire(enemyShot(1455, 1500, 280, 0), { x: -1, y: 0 }, 50, frame).hp, 90, `gap 20 ${frame}ms`);
     assert.equal(fire(enemyShot(1445, 1500, 280, 0), { x: -1, y: 0 }, 50, frame).hp, 100, `gap 30 50ms ${frame}ms`);
     assert.equal(fire(enemyShot(1445, 1500, 280, 0), { x: -1, y: 0 }, 60, frame).hp, 90, `gap 30 60ms ${frame}ms`);

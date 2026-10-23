@@ -120,6 +120,26 @@ test('player damage has a 0.3s shared cooldown, enemies have no damage cooldown'
   assert.equal(enemy.hp, 55);
 });
 
+test('melee enemies hit once on contact and then every attack interval, regardless of frame size', () => {
+  assert.deepEqual(['soldier', 'knight', 'paladin', 'zealot', 'commander'].map((kind) => ENEMY_STATS[kind].attackMs),
+    [800, 1000, 1200, 500, 1500]);
+  // 플레이어(1480~1520) 오른쪽 0.5px 옆에 붙은 적. 체력을 크게 두어 자동 공격으로 죽지 않게 한다.
+  const hitsIn = (kind, frame) => {
+    const battle = new Battle([], { spawning: false });
+    battle.player.hp = battle.player.maxHp = 100000;
+    const enemy = createEnemy(100, kind, 1520.5, 1480);
+    enemy.hp = enemy.maxHp = 100000;
+    battle.enemies.push(enemy);
+    for (let t = 0; t < 2000; t += frame) battle.update(Math.min(frame, 2000 - t), { x: 0, y: 0 }, stillView);
+    return (100000 - battle.player.hp) / ENEMY_STATS[kind].damage;
+  };
+  // 첫 단계에 닿자마자 한 번, 이후 간격마다: 2초 동안 병사 3번(0·0.8·1.6초), 기사 2번, 성기사 2번, 광신도 4번, 성기사단장 2번.
+  const expected = { soldier: 3, knight: 2, paladin: 2, zealot: 4, commander: 2 };
+  for (const frame of [20, 45, 50]) {
+    for (const [kind, hits] of Object.entries(expected)) assert.equal(hitsIn(kind, frame), hits, `${kind} ${frame}ms`);
+  }
+});
+
 test('ranged enemies shoot through obstacles and respect their independent attack interval', () => {
   const battle = new Battle([{ x: 1590, y: 1400, width: 40, height: 200 }], { spawning: false });
   const archer = createEnemy(100, 'archer', 1690, 1480);
@@ -526,7 +546,8 @@ test('stat rewards change attack damage, move speed, shot speed and pickup radiu
   for (const id of ['damage', 'moveSpeed', 'shotSpeed', 'pickupRadius']) battle.applyReward(id);
   const start = battle.player.x;
   step(battle, 1000, 20, { x: 1, y: 0 });
-  assert.ok(Math.abs(battle.player.x - start - 275) < 1e-9);
+  // 워록 이동속도 230 × 110% = 253.
+  assert.ok(Math.abs(battle.player.x - start - 253) < 1e-9);
   const enemy = createEnemy(100, 'paladin', 1950, 1480);
   enemy.hp = 10000;
   battle.enemies.push(enemy);
@@ -597,8 +618,8 @@ test('game time and movement follow real elapsed time for short, long and irregu
     const start = battle.player.x;
     for (const ms of frames) battle.update(ms, { x: 1, y: 0 }, stillView);
     assert.equal(battle.time, 1000, `${frames.length} frames`);
-    // 이동량은 250 × dt / 1000의 부동소수점 합이므로 1e-9px 안에서 비교한다.
-    assert.ok(Math.abs(battle.player.x - start - 250) < 1e-9, `${frames.length} frames`);
+    // 이동량은 워록 이동속도 230 × dt / 1000의 부동소수점 합이므로 1e-9px 안에서 비교한다.
+    assert.ok(Math.abs(battle.player.x - start - 230) < 1e-9, `${frames.length} frames`);
   }
 });
 
@@ -708,7 +729,8 @@ test('a level up or death inside a long frame stops the rest of that frame', () 
   leveling.update(200, { x: 1, y: 0 }, stillView);
   assert.equal(leveling.choices.length, 3);
   assert.equal(leveling.time, 50);
-  assert.equal(leveling.player.x, 1480 + 12.5);
+  // 첫 50ms 단계만 진행된다: 230 × 0.05 = 11.5px.
+  assert.equal(leveling.player.x, 1480 + 11.5);
 
   const dying = new Battle([], { spawning: false });
   dying.player.hp = 5;

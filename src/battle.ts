@@ -15,17 +15,28 @@ export interface Actor extends Box {
   lastHitAt: number;
 }
 
-export interface Enemy extends Actor {
-  kind: EnemyKind;
-  targetId: number | null;
-  nextThinkAt: number;
+// 경로를 따라 걷는 몸체. 적과 좀비가 같은 이동 규칙을 쓴다.
+interface Walker extends Actor {
   nextPathAt: number;
-  nextAttackAt: number;
   path: Point[];
   pathIndex: number;
   stuckMs: number;
+}
+
+export interface Enemy extends Walker {
+  kind: EnemyKind;
+  targetId: number | null;
+  nextThinkAt: number;
+  nextAttackAt: number;
   // 원거리 적·사제가 사거리 안에서 멈춰 있는지. 멈춘 동안은 다른 적의 이동을 막지 않는다.
   holding: boolean;
+}
+
+// 네크로맨서의 좀비. 플레이어 편 소환물로, 적이 플레이어와 함께 공격 대상 후보로 삼는다.
+export interface Zombie extends Walker {
+  targetId: number | null;
+  nextThinkAt: number;
+  nextAttackAt: number;
 }
 
 export interface Projectile extends Box {
@@ -45,7 +56,7 @@ export interface Projectile extends Box {
 // 휘두르기·폭발·사제 회복의 범위를 잠시 보여주기 위한 기록. 판정에는 쓰지 않는다.
 export interface AttackEffect {
   id: number;
-  kind: 'swing' | 'explosion' | 'heal';
+  kind: 'swing' | 'explosion' | 'heal' | 'blast';
   x: number;
   y: number;
   radius: number;
@@ -142,8 +153,9 @@ const rotate = (x: number, y: number, radians: number): Point => ({
 export class Battle {
   readonly character: CharacterId;
   readonly player: Actor;
-  // 소환물 시스템은 아직 만들지 않는다. 추후 살아 있는 소환물을 같은 후보 목록에 연결한다.
+  // 적의 공격 대상 후보: 플레이어와 살아 있는 소환물(좀비).
   readonly allies: Actor[];
+  zombies: Zombie[] = [];
   enemies: Enemy[] = [];
   projectiles: Projectile[] = [];
   effects: AttackEffect[] = [];
@@ -181,6 +193,8 @@ export class Battle {
   private nextBlessAt: number = BLESS.everyMs;
   // 경험치 배율로 생긴 1 미만의 경험치를 백분율 단위로 이월한다.
   private expCarry = 0;
+  // 좀비의 공격이 피해를 주는 동안 참이다. 전염은 좀비에게 죽은 적에만 적용한다.
+  private killedByZombie = false;
 
   // 아직 보상을 고르지 않은 레벨업 수. 현재 열린 선택창을 포함한다.
   get pendingChoices(): number {
@@ -357,7 +371,8 @@ export class Battle {
     this.hazards = this.hazards.filter((hazard) => {
       if (this.time < hazard.hitAt) return true;
       const damage = this.enemyDamage(hazard.kind === 'brand' ? BOSS.brand.damage : BOSS.cross.damage);
-      for (const ally of this.allies) if (ally.hp > 0 && hazardTouches(hazard, ally)) this.dealDamage(ally, damage);
+      // 피해 도중 좀비가 새로 일어날 수 있으므로(시체 폭발 연쇄) 시작 시점의 목록으로 판정한다.
+      for (const ally of [...this.allies]) if (ally.hp > 0 && hazardTouches(hazard, ally)) this.dealDamage(ally, damage);
       return false;
     });
   }
@@ -378,7 +393,8 @@ export class Battle {
 
   dealDamage(target: Actor, damage: number): boolean {
     if (this.gameOver || target.hp <= 0 || !target.attackable) return false;
-    if (target === this.player && this.time - target.lastHitAt < CFG.player.hurtMs) return false;
+    // 플레이어와 좀비는 맞은 뒤 피격 간격 동안 다시 피해를 받지 않는다. 적에게는 피격 간격이 없다.
+    if (this.allies.includes(target) && this.time - target.lastHitAt < CFG.player.hurtMs) return false;
     if (this.guarded(target)) damage = Math.round(damage * (100 - BOSS.aegis.reducePercent) / 100);
     // 배리어가 체력보다 먼저 피해를 막는다. 다 막아도 피격으로 보아 피격 간격이 시작된다.
     if (target === this.player && this.barrier > 0) {
@@ -389,12 +405,17 @@ export class Battle {
     target.hp = Math.max(0, target.hp - damage);
     target.lastHitAt = this.time;
     // 살아 있던 적이 이 피해로 죽을 때만 구슬을 만들므로 처치 주체와 관계없이 한 번만 생긴다.
-    if (target.hp === 0 && this.enemies.includes(target as Enemy)) this.dropOrb(target as Enemy);
+    if (target.hp === 0 && this.enemies.includes(target as Enemy)) {
+      this.dropOrb(target as Enemy);
+      this.tryRaise(target as Enemy);
+    }
     // 보스가 죽으면 아직 끝나지 않은 범위 공격은 사라지고, 보스 보상 선택이 생긴다.
     if (target.hp === 0 && target === this.boss) {
       this.hazards = [];
       this.pendingBossRewards++;
     }
+    // 좀비가 적의 공격으로 죽으면 시체 폭발이 일어난다. 플레이어가 죽어 함께 사라지는 경우는 해당하지 않는다.
+    if (target.hp === 0 && this.skills.corpseBlast && this.zombies.includes(target as Zombie)) this.corpseBlast(target as Zombie);
     if (target === this.player && target.hp === 0) {
       this.gameOver = true;
       for (const ally of this.allies) ally.hp = 0;
@@ -577,57 +598,141 @@ export class Battle {
     enemy.holding = stats.ranged && distanceSquared(enemy, target) <= stats.range ** 2;
     if (enemy.holding) return;
     if (!stats.ranged && edgeDistance(enemy, target) <= 0.75) return;
-    const from = center(enemy), destination = center(target);
-    let waypoint: Point | undefined;
-    if (this.navigation.canTravel(from, destination, enemy.width, enemy.height)) {
-      waypoint = destination;
-      enemy.path = []; enemy.pathIndex = 0;
-    } else {
-      if (this.time >= enemy.nextPathAt && this.pathBudget > 0) {
-        this.pathBudget--;
-        enemy.path = this.navigation.findPath(from, destination, enemy.width, enemy.height) ?? [];
-        enemy.pathIndex = 0;
-        enemy.nextPathAt = this.time + CFG.pathMs + enemy.id % 4 * 50;
+    // 가호 '인도'은 이미 있는 적에게도 바로 적용된다.
+    this.travel(enemy, center(target), stats.speed * this.blessPercent('blessSpeed') / 100, dt, () => {
+      // 적끼리는 서로 몸체 위쪽 통과 영역을 뺀 아래쪽끼리만 막는다. 다른 적의 막는 범위를 그 적의 통과 영역만큼
+      // 위에서, 이 적의 통과 영역만큼 아래에서 줄이면 두 아래쪽 몸체가 겹칠 때만 부딪힌다.
+      // 사거리 안에서 멈춘 원거리 적·사제는 근접 적을 막지 않아, 그 뒤의 근접 적이 줄을 지나 다가갈 수 있다.
+      // 원거리 적·사제끼리는 멈춰 있어도 막아, 같은 자리에 겹쳐 서지 않고 옆으로 비켜 선다.
+      // 매 이동마다 상자를 새로 만들지 않도록 재사용한다.
+      const lift = enemy.height * CFG.enemyPassTop;
+      let count = 0;
+      for (const other of this.enemies) {
+        if (other === enemy || other.hp <= 0 || (other.holding && !stats.ranged)) continue;
+        const inset = other.height * CFG.enemyPassTop;
+        const box = this.enemyBlockers[count++] ??= { x: 0, y: 0, width: 0, height: 0 };
+        box.x = other.x; box.y = other.y + inset; box.width = other.width; box.height = other.height - inset - lift;
       }
-      while (enemy.pathIndex < enemy.path.length
-        && Math.hypot(from.x - enemy.path[enemy.pathIndex].x, from.y - enemy.path[enemy.pathIndex].y) < 4) enemy.pathIndex++;
-      waypoint = enemy.path[enemy.pathIndex];
+      return [...this.obstacles, ...this.allies.filter((actor) => actor.hp > 0), ...this.enemyBlockers.slice(0, count)];
+    });
+  }
+
+  // 적과 좀비가 함께 쓰는 이동: 직선으로 갈 수 있으면 곧장, 아니면 경로를 찾아 장애물을 우회한다.
+  // 막는 상자는 실제로 움직일 때만 만든다.
+  private travel(body: Walker, destination: Point, speed: number, dt: number, blockers: () => Box[]): void {
+    const from = center(body);
+    let waypoint: Point | undefined;
+    if (this.navigation.canTravel(from, destination, body.width, body.height)) {
+      waypoint = destination;
+      body.path = []; body.pathIndex = 0;
+    } else {
+      if (this.time >= body.nextPathAt && this.pathBudget > 0) {
+        this.pathBudget--;
+        body.path = this.navigation.findPath(from, destination, body.width, body.height) ?? [];
+        body.pathIndex = 0;
+        body.nextPathAt = this.time + CFG.pathMs + body.id % 4 * 50;
+      }
+      while (body.pathIndex < body.path.length
+        && Math.hypot(from.x - body.path[body.pathIndex].x, from.y - body.path[body.pathIndex].y) < 4) body.pathIndex++;
+      waypoint = body.path[body.pathIndex];
     }
     if (!waypoint) return; // 도달 불가능하면 대기하고 다음 주기에 재탐색한다.
     const dx = waypoint.x - from.x, dy = waypoint.y - from.y;
     const length = Math.hypot(dx, dy);
     if (length < 0.001) return;
-    // 가호 '인도'은 이미 있는 적에게도 바로 적용된다.
-    const distance = Math.min(length, stats.speed * this.blessPercent('blessSpeed') / 100 * dt / 1000);
-    // 적끼리는 서로 몸체 위쪽 통과 영역을 뺀 아래쪽끼리만 막는다. 다른 적의 막는 범위를 그 적의 통과 영역만큼
-    // 위에서, 이 적의 통과 영역만큼 아래에서 줄이면 두 아래쪽 몸체가 겹칠 때만 부딪힌다.
-    // 사거리 안에서 멈춘 원거리 적·사제는 근접 적을 막지 않아, 그 뒤의 근접 적이 줄을 지나 다가갈 수 있다.
-    // 원거리 적·사제끼리는 멈춰 있어도 막아, 같은 자리에 겹쳐 서지 않고 옆으로 비켜 선다.
-    // 매 이동마다 상자를 새로 만들지 않도록 재사용한다.
-    const lift = enemy.height * CFG.enemyPassTop;
-    let count = 0;
-    for (const other of this.enemies) {
-      if (other === enemy || other.hp <= 0 || (other.holding && !stats.ranged)) continue;
-      const inset = other.height * CFG.enemyPassTop;
-      const box = this.enemyBlockers[count++] ??= { x: 0, y: 0, width: 0, height: 0 };
-      box.x = other.x; box.y = other.y + inset; box.width = other.width; box.height = other.height - inset - lift;
-    }
-    const blockers = [...this.obstacles, ...this.allies.filter((actor) => actor.hp > 0), ...this.enemyBlockers.slice(0, count)];
-    let moved = moveAndSlide(enemy, dx / length * distance, dy / length * distance, CFG.world, blockers);
-    const progress = Math.hypot(moved.x - enemy.x, moved.y - enemy.y);
+    const distance = Math.min(length, speed * dt / 1000);
+    const walls = blockers();
+    let moved = moveAndSlide(body, dx / length * distance, dy / length * distance, CFG.world, walls);
+    const progress = Math.hypot(moved.x - body.x, moved.y - body.y);
     if (progress < distance * 0.25) {
-      // 적 무리의 몸체에 막히면 좌우로 작은 우회를 시도한다. 순간이동이나 겹침은 허용하지 않는다.
+      // 무리의 몸체에 막히면 좌우로 작은 우회를 시도한다. 순간이동이나 겹침은 허용하지 않는다.
       let bestProgress = progress;
-      const preferredSide = enemy.id % 2 ? 1 : -1;
+      const preferredSide = body.id % 2 ? 1 : -1;
       for (const side of [preferredSide, -preferredSide]) {
-        const candidate = moveAndSlide(enemy, -dy / length * distance * side, dx / length * distance * side, CFG.world, blockers);
-        const amount = Math.hypot(candidate.x - enemy.x, candidate.y - enemy.y);
+        const candidate = moveAndSlide(body, -dy / length * distance * side, dx / length * distance * side, CFG.world, walls);
+        const amount = Math.hypot(candidate.x - body.x, candidate.y - body.y);
         if (amount > bestProgress + 0.001) { moved = candidate; bestProgress = amount; }
       }
-      enemy.stuckMs += dt;
-      if (enemy.stuckMs > 600) { enemy.nextPathAt = 0; enemy.stuckMs = 0; }
-    } else enemy.stuckMs = 0;
-    enemy.x = moved.x; enemy.y = moved.y;
+      body.stuckMs += dt;
+      if (body.stuckMs > 600) { body.nextPathAt = 0; body.stuckMs = 0; }
+    } else body.stuckMs = 0;
+    body.x = moved.x; body.y = moved.y;
+  }
+
+  // 좀비: 감지 범위(자기 중심 원에 몸체가 닿은 적) 안에서 가장 가까운 적을 쫓아 몸이 닿으면 공격 간격마다 피해를 준다.
+  // 근접 공격이라 장애물 너머의 적은 때리지 않는다. 감지한 적이 없거나 쫓던 적이 범위를 벗어나면 플레이어 중심 근처로 돌아온다.
+  // 좀비는 장애물·적·다른 좀비에 막히고, 플레이어와는 서로 지나간다.
+  private updateZombies(dt: number): void {
+    const config = SKILL.zombie;
+    const home = center(this.player);
+    for (const zombie of this.zombies) {
+      if (zombie.hp <= 0 || this.gameOver) continue;
+      const origin = center(zombie);
+      const sensed = (enemy: Enemy) => enemy.hp > 0 && enemy.attackable && circleTouches(origin, config.senseRadius, enemy);
+      let target = this.enemies.find((enemy) => enemy.id === zombie.targetId && sensed(enemy));
+      if (!target || this.time >= zombie.nextThinkAt) {
+        const selected = nearestTarget(zombie, this.enemies.filter(sensed), undefined, zombie.targetId);
+        if (selected?.id !== zombie.targetId) { zombie.nextPathAt = 0; zombie.path = []; }
+        target = selected ?? undefined;
+        zombie.targetId = target?.id ?? null;
+        zombie.nextThinkAt = this.time + CFG.targetMs;
+      }
+      const blockers = () => [...this.obstacles, ...this.enemies.filter((enemy) => enemy.hp > 0),
+        ...this.zombies.filter((other) => other !== zombie && other.hp > 0)];
+      if (!target) {
+        const spot = center(zombie);
+        if (Math.hypot(spot.x - home.x, spot.y - home.y) > config.followRadius) this.travel(zombie, home, config.speed, dt, blockers);
+        continue;
+      }
+      if (edgeDistance(zombie, target) > 0.75) {
+        this.travel(zombie, center(target), config.speed, dt, blockers);
+        continue;
+      }
+      if (this.time < zombie.nextAttackAt
+        || this.obstacles.some((obstacle) => segmentHit(center(zombie), center(target), obstacle) !== null)) continue;
+      // 시체 강화는 이미 있는 좀비의 공격력에도 바로 적용된다.
+      this.killedByZombie = true;
+      this.strike(target, Math.round(config.damage * this.skills.zombiePercent / 100));
+      this.killedByZombie = false;
+      zombie.nextAttackAt = this.intervalFrom(zombie.nextAttackAt) + config.attackMs;
+    }
+  }
+
+  // 죽은 좀비를 목록에서 뺀다. 순회 중에 빼지 않도록 단계 끝에 한 번 정리한다.
+  private removeDeadZombies(): void {
+    if (this.zombies.every((zombie) => zombie.hp > 0)) return;
+    this.zombies = this.zombies.filter((zombie) => zombie.hp > 0);
+    for (let i = this.allies.length - 1; i > 0; i--) if (this.allies[i].hp <= 0) this.allies.splice(i, 1);
+  }
+
+  // 시체 부활: 보스가 아닌 적이 죽으면 좀비화 확률에 따라 그 자리(적 중심)에 좀비가 일어난다. 동시에 최대 수(망자의 군세 포함)까지이며,
+  // 좀비 몸체가 월드 밖이나 장애물에 걸리면 일어나지 않는다. 체력은 일어날 때의 시체 강화로 정한다.
+  private tryRaise(enemy: Enemy): void {
+    const chance = this.skills.raisePercent + (this.skills.contagion && this.killedByZombie ? SKILL.contagion.percent : 0);
+    if (chance <= 0 || enemy.kind === BOSS.kind || this.zombies.filter((zombie) => zombie.hp > 0).length >= this.skills.zombieMax) return;
+    if (this.random() * 100 >= chance) return;
+    const { size } = SKILL.zombie, point = center(enemy);
+    const body = { x: point.x - size / 2, y: point.y - size / 2, width: size, height: size };
+    if (!contains(CFG.world, body) || this.obstacles.some((obstacle) => overlaps(body, obstacle))) return;
+    const hp = Math.round(SKILL.zombie.hp * this.skills.zombiePercent / 100);
+    const zombie: Zombie = { id: this.nextId++, ...body, hp, maxHp: hp, attackable: true, lastHitAt: -Infinity, targetId: null,
+      nextThinkAt: this.time, nextPathAt: this.time, nextAttackAt: this.time, path: [], pathIndex: 0, stuckMs: 0 };
+    this.zombies.push(zombie);
+    this.allies.push(zombie);
+  }
+
+  // 시체 폭발: 좀비가 죽은 자리(좀비 중심)에서 몸체가 원에 닿은 적에게 플레이어 공격력의 비율만큼 피해를 준다.
+  // 좀비의 공격이 아니므로 이 폭발로 죽은 적에는 전염을 적용하지 않는다.
+  private corpseBlast(zombie: Zombie): void {
+    const byZombie = this.killedByZombie;
+    this.killedByZombie = false;
+    const point = center(zombie), { radius, damagePercent } = SKILL.corpseBlast;
+    const damage = Math.round(this.stats.damage * damagePercent / 100);
+    for (const other of this.enemies) {
+      if (other.hp > 0 && other.attackable && circleTouches(point, radius, other)) this.strike(other, damage);
+    }
+    this.addEffect('blast', point, radius);
+    this.killedByZombie = byZombie;
   }
 
   private updateEnemies(dt: number, view: Box): void {
@@ -656,9 +761,12 @@ export class Battle {
           this.fire(enemy, target, 'enemy', this.enemyDamage(stats.damage), stats.color, stats.shotSpeed ?? CFG.enemyShot.speed);
           enemy.nextAttackAt = this.intervalFrom(enemy.nextAttackAt) + stats.attackMs;
         }
-      } else if (edgeDistance(enemy, target) <= 0.75
+      } else if (edgeDistance(enemy, target) <= 0.75 && this.time >= enemy.nextAttackAt
         && !this.obstacles.some((obstacle) => segmentHit(center(enemy), center(target), obstacle) !== null)) {
+        // 근접 적은 몸이 닿은 순간 한 번 때리고, 붙어 있는 동안 공격 간격마다 때린다. 대상이 피격 간격 중이라
+        // 피해가 없어도 한 번의 공격으로 센다.
         this.dealDamage(target, this.enemyDamage(stats.damage));
+        enemy.nextAttackAt = this.intervalFrom(enemy.nextAttackAt) + stats.attackMs;
       }
     }
   }
@@ -760,9 +868,9 @@ export class Battle {
     const length = Math.hypot(input.x, input.y);
     if (length) {
       const distance = power.speed * dt / 1000;
+      // 플레이어는 자기 좀비와 서로 지나간다. 좀비 무리에 갇히지 않게 하기 위해서다.
       const moved = moveAndSlide(this.player, input.x / length * distance, input.y / length * distance,
-        CFG.world, [...this.obstacles, ...this.enemies.filter((enemy) => enemy.hp > 0),
-          ...this.allies.filter((ally) => ally !== this.player && ally.hp > 0)]);
+        CFG.world, [...this.obstacles, ...this.enemies.filter((enemy) => enemy.hp > 0)]);
       this.player.x = moved.x; this.player.y = moved.y;
     }
     const view = viewForPlayer(this.player);
@@ -770,6 +878,7 @@ export class Battle {
     this.updateEnemies(dt, view);
     this.resolveHazards();
     if (this.gameOver) return;
+    this.updateZombies(dt);
     const attackReadyAt = this.lastPlayerAttackAt + power.attackMs;
     if (this.time >= attackReadyAt) {
       if (CHARACTER_STATS[this.character].attack === 'swing') {
@@ -783,6 +892,7 @@ export class Battle {
       }
     }
     this.updateProjectiles(dt);
+    this.removeDeadZombies();
     // 같은 프레임에 플레이어가 사망하면 구슬 획득과 레벨업 선택이 일어나지 않는다.
     if (this.gameOver) return;
     this.updateOrbs(dt);

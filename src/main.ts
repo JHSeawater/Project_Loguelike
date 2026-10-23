@@ -23,6 +23,7 @@ class GameScene extends Phaser.Scene {
   private player!: Phaser.GameObjects.Rectangle;
   private battle!: Battle;
   private enemyViews = new Map<number, Phaser.GameObjects.Rectangle>();
+  private zombieViews = new Map<number, Phaser.GameObjects.Rectangle>();
   private shotViews = new Map<number, Phaser.GameObjects.Rectangle>();
   private orbViews = new Map<number, Phaser.GameObjects.Rectangle>();
   private effectViews = new Map<number, Phaser.GameObjects.Arc>();
@@ -63,6 +64,7 @@ class GameScene extends Phaser.Scene {
   create(): void {
     // Phaser는 장면 객체를 다시 쓰므로, 이전 판의 표시 목록과 상태를 비우고 시작한다.
     this.enemyViews = new Map();
+    this.zombieViews = new Map();
     this.shotViews = new Map();
     this.orbViews = new Map();
     this.effectViews = new Map();
@@ -185,6 +187,23 @@ class GameScene extends Phaser.Scene {
     for (const [id, view] of this.enemyViews) {
       if (!liveEnemies.has(id)) { view.destroy(); this.enemyViews.delete(id); }
     }
+    // 좀비는 어두운 초록 사각형이며, 맞은 뒤 피격 간격 동안 플레이어처럼 깜빡인다.
+    const liveZombies = new Set<number>();
+    for (const zombie of battle.zombies) {
+      if (zombie.hp <= 0) continue;
+      liveZombies.add(zombie.id);
+      let view = this.zombieViews.get(zombie.id);
+      if (!view) {
+        view = this.add.rectangle(0, 0, zombie.width, zombie.height, SKILL_CONFIG.zombie.color).setStrokeStyle(2, 0x1d2a1a);
+        this.zombieViews.set(zombie.id, view);
+      }
+      const age = battle.time - zombie.lastHitAt;
+      view.setPosition(zombie.x + zombie.width / 2, zombie.y + zombie.height / 2).setDepth(getFootDepth(zombie))
+        .setAlpha(age < BATTLE_CONFIG.player.hurtMs && Math.floor(age / 120) % 2 === 0 ? 0.35 : 1);
+    }
+    for (const [id, view] of this.zombieViews) {
+      if (!liveZombies.has(id)) { view.destroy(); this.zombieViews.delete(id); }
+    }
     // 보스 범위 공격의 경고는 판정 범위 그대로 그리고, 피해 시점이 다가올수록 진하게 한다. 몸체 위, 투사체 아래에 그린다.
     const liveHazards = new Set<number>();
     for (const hazard of battle.hazards) {
@@ -248,7 +267,7 @@ class GameScene extends Phaser.Scene {
       liveEffects.add(effect.id);
       let view = this.effectViews.get(effect.id);
       if (!view) {
-        const color = effect.kind === 'swing' ? 0xc9b8ff : effect.kind === 'heal' ? 0xe58fb8 : 0xffa64d;
+        const color = effect.kind === 'swing' ? 0xc9b8ff : effect.kind === 'heal' ? 0xe58fb8 : effect.kind === 'blast' ? 0x8fd16a : 0xffa64d;
         view = this.add.circle(effect.x, effect.y, effect.radius, color, 0.18).setStrokeStyle(2, color).setDepth(10001);
         this.effectViews.set(effect.id, view);
       }
@@ -263,7 +282,8 @@ class GameScene extends Phaser.Scene {
     this.expFill.setDisplaySize(180 * battle.experience / need, 6);
     const surgeLeft = battle.surgeUntil - battle.time;
     this.levelText.setText(`Lv ${battle.level}   ${battle.experience}/${need}`
-      + (surgeLeft > 0 ? `    마력 폭주 ${(surgeLeft / 1000).toFixed(1)}초` : ''));
+      + (surgeLeft > 0 ? `    마력 폭주 ${(surgeLeft / 1000).toFixed(1)}초` : '')
+      + (battle.character === 'necromancer' ? `    좀비 ${battle.zombies.length}/${battle.skills.zombieMax}` : ''));
     const blessings = BLESS_IDS.filter((id) => battle.rewardStacks[id] > 0)
       .map((id) => `${BLESS_LABELS[id]} +${battle.blessPercent(id) - 100}%`);
     this.blessText.setText(blessings.length ? `가호: 적 ${blessings.join(' · ')}` : '');

@@ -7,18 +7,19 @@ export const FONT = 'Malgun Gothic, sans-serif';
 // 화면이 열린 직후의 입력은 무시한다. 이전 화면에서 누르던 키나 연타가 다음 화면의 선택으로 이어지지 않게 한다.
 export const INPUT_DELAY_MS = 300;
 
-const PLAYABLE: readonly CharacterId[] = ['warlock', 'deathKnight'];
+const PLAYABLE: readonly CharacterId[] = ['warlock', 'deathKnight', 'necromancer'];
 // 직업 지침의 보류 구상. 고를 수 없는 잠긴 카드로만 보여준다.
-const PLANNED = ['네크로맨서', '드라큘라', '드루이드', '서큐버스'];
+const PLANNED = ['드라큘라', '드루이드', '서큐버스'];
 
 const hex = (color: number): string => `#${color.toString(16).padStart(6, '0')}`;
 
 // 카드 문구는 직업·특기 데이터로 만든다. 화면에서 따로 수치를 정하지 않는다.
 function describe(id: CharacterId): string[] {
-  const stats = CHARACTER_STATS[id], surge = SKILL_CONFIG.surge;
+  const stats = CHARACTER_STATS[id], surge = SKILL_CONFIG.surge, raise = SKILL_CONFIG.raise;
   const attack = stats.attack === 'shot' ? '화면 안 가장 가까운 적에게 투사체 발사' : `주변 ${stats.swingRadius}px 안의 적 전부 베기`;
   const passive = id === 'warlock'
     ? `마력 폭주 — 보상 선택 후 ${surge.durationMs / 1000}초간 공격력·이동속도 +${surge.percent}%, 공격 간격 −${surge.percent}%`
+    : id === 'necromancer' ? `시체 부활 — 적이 죽으면 ${raise.chancePercent}% 확률로 좀비가 됨(최대 ${raise.max}마리)`
     : `생명 착취 — 적 처치 시 체력 +${stats.killHeal}`;
   const skills = SKILL_IDS.filter((skill) => REWARDS[skill].character === id)
     .map((skill) => REWARDS[skill].special ? `${REWARDS[skill].name}(특수)` : REWARDS[skill].name);
@@ -67,7 +68,8 @@ export class CharacterSelectScene extends Phaser.Scene {
     this.selected = 0;
     this.cards = [];
     this.add.text(640, 60, '캐릭터 선택', { fontFamily: FONT, fontSize: '32px', color: '#e5e3c8' }).setOrigin(0.5);
-    const card = { width: 420, height: 340, gap: 40, top: 110 };
+    // 구현 직업 카드 세 장이 1280px 화면 안에 들어가도록 한다.
+    const card = { width: 380, height: 340, gap: 24, top: 110 };
     PLAYABLE.forEach((id, index) => {
       const stats = CHARACTER_STATS[id];
       const x = 640 + (index - (PLAYABLE.length - 1) / 2) * (card.width + card.gap);

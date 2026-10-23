@@ -3,7 +3,7 @@ import { BATTLE_CONFIG as CFG, BLESS_CONFIG as BLESS, CHARACTER_STATS, SKILL_CON
 export type CommonRewardId = 'damage' | 'attackSpeed' | 'maxHp' | 'moveSpeed' | 'shotSpeed' | 'pickupRadius' | 'choices' | 'heal'
   | 'soulHarvest';
 export type SkillId = 'multiShot' | 'explosion' | 'homing' | 'surgeTuning' | 'swingRange' | 'bloodThirst' | 'bloodFrenzy'
-  | 'deathLord';
+  | 'deathLord' | 'plague' | 'corpseBoost' | 'legion' | 'contagion' | 'corpseBlast';
 export type BossRewardId = 'bossSkill' | 'might' | 'barrier' | 'restore';
 export type BlessId = 'blessHp' | 'blessSpeed' | 'blessDamage';
 export type RewardId = CommonRewardId | SkillId | BossRewardId | BlessId;
@@ -73,6 +73,17 @@ export const REWARDS: Record<RewardId, RewardDef> = {
     maxStacks: 1, character: 'deathKnight', special: true, tier: 'epic' },
   deathLord: { name: '죽음의 군주', effect: `공격력·이동속도·최대 체력 +${SKILL.deathLord.percent}%\n공격 간격 −${SKILL.deathLord.percent}%`,
     maxStacks: 1, character: 'deathKnight', special: true, tier: 'epic' },
+  // 역병 확산은 좀비화 확률이 상한에 닿으면 더 나오지 않는다.
+  plague: { name: '역병 확산', effect: `좀비화 확률 +${SKILL.plague.percentStep}%p\n(최대 ${SKILL.plague.maxPercent}%)`,
+    maxStacks: (SKILL.plague.maxPercent - SKILL.raise.chancePercent) / SKILL.plague.percentStep, character: 'necromancer', tier: 'rare' },
+  corpseBoost: { name: '시체 강화', effect: `좀비 공격력·체력 +${SKILL.corpseBoost.percent}%`, maxStacks: Infinity,
+    character: 'necromancer', tier: 'uncommon' },
+  legion: { name: '망자의 군세', effect: `최대 좀비 수 +${SKILL.legion.maxStep}`, maxStacks: Infinity, character: 'necromancer',
+    tier: 'uncommon' },
+  contagion: { name: '전염', effect: `좀비에게 죽은 적의\n좀비화 확률 +${SKILL.contagion.percent}%p`, maxStacks: 1,
+    character: 'necromancer', special: true, tier: 'epic' },
+  corpseBlast: { name: '시체 폭발', effect: `좀비가 죽을 때 주변 적에게\n공격력의 ${SKILL.corpseBlast.damagePercent}% 피해`, maxStacks: 1,
+    character: 'necromancer', special: true, tier: 'epic' },
   bossSkill: { name: '직업 특수 특기', effect: '이 직업의 특수 특기 하나를\n바로 얻는다', maxStacks: 1, boss: true },
   might: { name: '기사단장의 힘', effect: `공격력 +${BOSS_REWARD.mightDamagePercent}%\n이동속도 +${BOSS_REWARD.mightSpeedPercent}%`,
     maxStacks: 1, boss: true },
@@ -87,7 +98,8 @@ export const REWARDS: Record<RewardId, RewardDef> = {
 // 모든 직업에 공통인 보상. 직업 특기는 SKILL_IDS에 따로 둔다.
 export const REWARD_IDS: CommonRewardId[] = ['damage', 'attackSpeed', 'maxHp', 'moveSpeed', 'shotSpeed', 'pickupRadius', 'choices', 'heal',
   'soulHarvest'];
-export const SKILL_IDS: SkillId[] = ['multiShot', 'explosion', 'homing', 'surgeTuning', 'swingRange', 'bloodThirst', 'bloodFrenzy', 'deathLord'];
+export const SKILL_IDS: SkillId[] = ['multiShot', 'explosion', 'homing', 'surgeTuning', 'swingRange', 'bloodThirst', 'bloodFrenzy', 'deathLord',
+  'plague', 'corpseBoost', 'legion', 'contagion', 'corpseBlast'];
 export const BOSS_REWARD_IDS: BossRewardId[] = ['bossSkill', 'might', 'barrier', 'restore'];
 // 가호 선택창은 항상 이 세 가호를 이 순서로 보여 준다.
 export const BLESS_IDS: BlessId[] = ['blessHp', 'blessSpeed', 'blessDamage'];
@@ -106,6 +118,7 @@ export function bossRewardPool(stacks: RewardStacks, character: CharacterId): Re
 const EXCLUDED_REWARDS: Record<CharacterId, readonly CommonRewardId[]> = {
   warlock: [],
   deathKnight: ['shotSpeed'],
+  necromancer: [],
 };
 
 // 직업의 선택지 후보: 제외 항목을 뺀 공통 보상과 그 직업의 특기를 같은 목록에 섞는다.
@@ -169,6 +182,12 @@ export interface SkillStats {
   swingRadius: number;
   killHeal: number;
   frenzy: boolean;
+  // 네크로맨서의 좀비화 확률(%), 좀비 공격력·체력 배율(%), 동시에 있을 수 있는 최대 좀비 수. 다른 직업은 좀비화 확률과 최대 수가 0이다.
+  raisePercent: number;
+  zombiePercent: number;
+  zombieMax: number;
+  contagion: boolean;
+  corpseBlast: boolean;
 }
 
 export function skillStatsFor(stacks: RewardStacks, character: CharacterId = 'warlock'): SkillStats {
@@ -184,6 +203,12 @@ export function skillStatsFor(stacks: RewardStacks, character: CharacterId = 'wa
     swingRadius: base.swingRadius + stacks.swingRange * SKILL.swingRange.radiusStep,
     killHeal: base.killHeal + stacks.bloodThirst * SKILL.bloodThirst.healStep,
     frenzy: stacks.bloodFrenzy > 0,
+    raisePercent: character === 'necromancer'
+      ? Math.min(SKILL.plague.maxPercent, SKILL.raise.chancePercent + stacks.plague * SKILL.plague.percentStep) : 0,
+    zombiePercent: 100 + stacks.corpseBoost * SKILL.corpseBoost.percent,
+    zombieMax: character === 'necromancer' ? SKILL.raise.max + stacks.legion * SKILL.legion.maxStep : 0,
+    contagion: stacks.contagion > 0,
+    corpseBlast: stacks.corpseBlast > 0,
   };
 }
 

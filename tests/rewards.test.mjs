@@ -12,10 +12,10 @@ const maxed = () => {
 
 test('base stats match the fixed player values and max stacks match the design table', () => {
   assert.deepEqual(statsFor(emptyStacks()),
-    { damage: 10, attackMs: 500, speed: 250, shotSpeed: 700, pickupRadius: 100, choiceCount: 3 });
+    { damage: 10, attackMs: 500, speed: 230, shotSpeed: 700, pickupRadius: 100, choiceCount: 3 });
   // 공격력·최대 체력·이동속도 강화는 최대 중첩이 없으므로 maxed()에서 0중첩이다.
   assert.deepEqual(statsFor(maxed()),
-    { damage: 10, attackMs: 250, speed: 250, shotSpeed: 1015, pickupRadius: 225, choiceCount: 5 });
+    { damage: 10, attackMs: 250, speed: 230, shotSpeed: 1015, pickupRadius: 225, choiceCount: 5 });
   const max = Object.fromEntries(REWARD_IDS.map((id) => [id, REWARDS[id].maxStacks]));
   assert.deepEqual(max, { damage: Infinity, attackSpeed: 5, maxHp: Infinity, moveSpeed: Infinity, shotSpeed: 3,
     pickupRadius: 5, choices: 2, heal: Infinity, soulHarvest: Infinity });
@@ -27,21 +27,21 @@ test('class stat rewards add a percentage of the class starting value per stack,
     stacks[id] = count;
     return { ...statsFor(stacks, character), maxHp: maxHpFor(stacks, character) };
   };
-  // 워록(공격력 10, 공격 간격 500, 이동속도 250, 체력 100): 공격력 +20%, 체력·이동속도 +10%, 공격 간격 −10%.
+  // 워록(공격력 10, 공격 간격 500, 이동속도 230, 체력 100): 공격력 +20%, 체력·이동속도 +10%, 공격 간격 −10%.
   assert.equal(stats('warlock', 'damage', 1).damage, 12);
   assert.equal(stats('warlock', 'damage', 50).damage, 110);
-  assert.equal(stats('warlock', 'moveSpeed', 1).speed, 275);
-  assert.equal(stats('warlock', 'moveSpeed', 20).speed, 750);
+  assert.equal(stats('warlock', 'moveSpeed', 1).speed, 253);
+  assert.equal(stats('warlock', 'moveSpeed', 20).speed, 690);
   assert.equal(stats('warlock', 'attackSpeed', 1).attackMs, 450);
   assert.equal(stats('warlock', 'attackSpeed', 5).attackMs, 250);
   assert.equal(stats('warlock', 'maxHp', 1).maxHp, 110);
   assert.equal(stats('warlock', 'maxHp', 15).maxHp, 250);
-  // 데스 나이트(공격력 16, 공격 간격 800, 이동속도 230, 체력 160)는 같은 비율을 자기 시작값에 적용한다. 정수로 반올림한다.
+  // 데스 나이트(공격력 16, 공격 간격 800, 이동속도 250, 체력 160)는 같은 비율을 자기 시작값에 적용한다. 정수로 반올림한다.
   assert.equal(stats('deathKnight', 'damage', 1).damage, 19);
   assert.equal(stats('deathKnight', 'damage', 2).damage, 22);
   // 복리가 아니다: 10중첩은 16 × 3 = 48이다(복리면 16 × 1.2^10 ≈ 99).
   assert.equal(stats('deathKnight', 'damage', 10).damage, 48);
-  assert.equal(stats('deathKnight', 'moveSpeed', 1).speed, 253);
+  assert.equal(stats('deathKnight', 'moveSpeed', 1).speed, 275);
   assert.equal(stats('deathKnight', 'attackSpeed', 1).attackMs, 720);
   assert.equal(stats('deathKnight', 'attackSpeed', 5).attackMs, 400);
   assert.equal(stats('deathKnight', 'maxHp', 1).maxHp, 176);
@@ -53,8 +53,9 @@ test('level-up rewards have the designed tiers and tier weights, and boss reward
   assert.deepEqual(tiers, {
     damage: 'common', maxHp: 'common', moveSpeed: 'common', shotSpeed: 'common', heal: 'common',
     attackSpeed: 'uncommon', pickupRadius: 'uncommon', bloodThirst: 'uncommon',
-    choices: 'rare', soulHarvest: 'rare', multiShot: 'rare', explosion: 'rare', swingRange: 'rare',
-    homing: 'epic', surgeTuning: 'epic', bloodFrenzy: 'epic', deathLord: 'epic',
+    corpseBoost: 'uncommon', legion: 'uncommon',
+    choices: 'rare', soulHarvest: 'rare', multiShot: 'rare', explosion: 'rare', swingRange: 'rare', plague: 'rare',
+    homing: 'epic', surgeTuning: 'epic', bloodFrenzy: 'epic', deathLord: 'epic', contagion: 'epic', corpseBlast: 'epic',
   });
   assert.deepEqual(Object.fromEntries(Object.entries(REWARD_TIERS).map(([tier, { name, weight }]) => [tier, [name, weight]])),
     { common: ['커먼', 1], uncommon: ['언커먼', 0.6], rare: ['레어', 0.3], epic: ['에픽', 0.1] });

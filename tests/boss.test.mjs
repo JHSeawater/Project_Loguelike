@@ -256,18 +256,18 @@ test('boss rewards grant the class special skill, the commander\'s might and a f
   warlock.applyReward('bossSkill');
   assert.equal(warlock.rewardStacks.homing, 1);
   assert.equal(warlock.skills.homing, true);
-  // 기사단장의 힘: 공격력 ×1.3(반올림), 이동속도 ×1.1. 공격력 강화 3회(16)면 20.8 → 21이다.
+  // 기사단장의 힘: 공격력 ×1.3(반올림), 이동속도 ×1.1. 공격력 강화 3회(16)면 20.8 → 21, 워록 이동속도 230 × 1.1 = 253이다.
   const strong = new Battle([], { spawning: false });
   for (let i = 0; i < 3; i++) strong.applyReward('damage');
   strong.applyReward('might');
-  assert.deepEqual([strong.stats.damage, strong.stats.speed], [21, 275]);
-  // 데스 나이트는 죽음의 군주(×1.2)까지 곱한다: 16 × 1.2 × 1.3 = 24.96 → 25, 230 × 1.2 × 1.1 = 303.6 → 304.
+  assert.deepEqual([strong.stats.damage, strong.stats.speed], [21, 253]);
+  // 데스 나이트는 죽음의 군주(×1.2)까지 곱한다: 16 × 1.2 × 1.3 = 24.96 → 25, 250 × 1.2 × 1.1 = 330.
   const knight = knightBattle();
   knight.bossSpecial = 'deathLord';
   knight.applyReward('bossSkill');
   knight.applyReward('might');
   assert.equal(knight.rewardStacks.deathLord, 1);
-  assert.deepEqual([knight.stats.damage, knight.stats.speed, knight.player.maxHp], [25, 304, 192]);
+  assert.deepEqual([knight.stats.damage, knight.stats.speed, knight.player.maxHp], [25, 330, 192]);
   // 완전 회복: 최대 체력 +30, 체력을 최대치까지 회복한다.
   const hurt = new Battle([], { spawning: false });
   hurt.player.hp = 50;

@@ -25,19 +25,19 @@ const orbAt = (id, cx, cy, value) => ({ id, x: cx - CFG.expOrb.size / 2, y: cy -
   width: CFG.expOrb.size, height: CFG.expOrb.size, value, pulled: false });
 const degrees = (shot) => Math.atan2(shot.vy, shot.vx) * 180 / Math.PI;
 
-test('each class starts from its own stats and the warlock keeps the original values', () => {
+test('each class starts from its own stats, and the warlock is the default class', () => {
   const warlock = new Battle([], { spawning: false });
   assert.equal(warlock.character, 'warlock');
   assert.deepEqual([warlock.player.hp, warlock.player.maxHp, warlock.player.width], [100, 100, 40]);
   assert.deepEqual(statsFor(emptyStacks(), 'warlock'),
-    { damage: 10, attackMs: 500, speed: 250, shotSpeed: 700, pickupRadius: 100, choiceCount: 3 });
+    { damage: 10, attackMs: 500, speed: 230, shotSpeed: 700, pickupRadius: 100, choiceCount: 3 });
   const knight = new Battle([], { spawning: false, character: 'deathKnight' });
   assert.deepEqual([knight.player.hp, knight.player.maxHp, knight.player.width], [160, 160, 40]);
   assert.deepEqual(statsFor(emptyStacks(), 'deathKnight'),
-    { damage: 16, attackMs: 800, speed: 230, shotSpeed: 700, pickupRadius: 100, choiceCount: 3 });
+    { damage: 16, attackMs: 800, speed: 250, shotSpeed: 700, pickupRadius: 100, choiceCount: 3 });
   assert.deepEqual(skillStatsFor(emptyStacks(), 'deathKnight'),
     { shots: 1, explosionRadius: 0, expPercent: 100, homing: false, surgeMs: 5000, surgePercent: 20, swingRadius: 100, killHeal: 1,
-      frenzy: false });
+      frenzy: false, raisePercent: 0, zombiePercent: 100, zombieMax: 0, contagion: false, corpseBlast: false });
 });
 
 test('reward pools mix common rewards with only the class skills and drop excluded rewards', () => {
@@ -85,15 +85,16 @@ test('surge boosts warlock damage, speed and attack rate for 5s after a choice, 
   battle.choices = ['heal'];
   battle.choose(0);
   assert.equal(battle.surgeUntil, battle.time + SKILL.surge.durationMs);
-  assert.deepEqual([battle.currentStats().damage, battle.currentStats().speed, battle.currentStats().attackMs], [12, 300, 400]);
+  // 워록 공격력 10·이동속도 230·공격 간격 500에 각 20%: 12, 276, 400.
+  assert.deepEqual([battle.currentStats().damage, battle.currentStats().speed, battle.currentStats().attackMs], [12, 276, 400]);
   const start = battle.player.x;
   step(battle, 1000, 20, { x: 1, y: 0 });
-  assert.ok(Math.abs(battle.player.x - start - 300) < 1e-9);
+  assert.ok(Math.abs(battle.player.x - start - 276) < 1e-9);
   // 끝나는 시점에 정확히 원래 값으로 돌아간다.
   step(battle, SKILL.surge.durationMs - 1000 - 20);
   assert.equal(battle.currentStats().damage, 12);
   step(battle, 20);
-  assert.deepEqual([battle.currentStats().damage, battle.currentStats().speed, battle.currentStats().attackMs], [10, 250, 500]);
+  assert.deepEqual([battle.currentStats().damage, battle.currentStats().speed, battle.currentStats().attackMs], [10, 230, 500]);
   const knight = frozenBattle('deathKnight');
   knight.orbs.push(orbAt(2, center(knight.player).x, center(knight.player).y, 5));
   step(knight, 20);
@@ -111,11 +112,11 @@ test('surge tuning triples the surge duration and doubles its stat changes, star
   battle.choose(0);
   // 지속 시간 3배(15초) 동안 공격력·이동속도 +40%, 공격 간격 −40%(변화량 2배).
   assert.equal(battle.surgeUntil, battle.time + 15_000);
-  assert.deepEqual([battle.currentStats().damage, battle.currentStats().speed, battle.currentStats().attackMs], [14, 350, 300]);
+  assert.deepEqual([battle.currentStats().damage, battle.currentStats().speed, battle.currentStats().attackMs], [14, 322, 300]);
   step(battle, 15_000 - 20);
   assert.equal(battle.currentStats().damage, 14);
   step(battle, 20);
-  assert.deepEqual([battle.currentStats().damage, battle.currentStats().speed, battle.currentStats().attackMs], [10, 250, 500]);
+  assert.deepEqual([battle.currentStats().damage, battle.currentStats().speed, battle.currentStats().attackMs], [10, 230, 500]);
 });
 
 test('blood frenzy doubles the next swing after a kill, once, and recharges when that swing kills again', () => {
@@ -354,7 +355,7 @@ test('death lord raises damage, speed and max health by 20% and shortens the att
   const stacks = emptyStacks();
   stacks.deathLord = 1;
   assert.deepEqual(statsFor(stacks, 'deathKnight'),
-    { damage: 19, attackMs: 640, speed: 276, shotSpeed: 700, pickupRadius: 100, choiceCount: 3 });
+    { damage: 19, attackMs: 640, speed: 300, shotSpeed: 700, pickupRadius: 100, choiceCount: 3 });
   assert.equal(maxHpFor(stacks, 'deathKnight'), 192);
   const battle = new Battle([], { spawning: false, character: 'deathKnight' });
   battle.player.hp = 100;
