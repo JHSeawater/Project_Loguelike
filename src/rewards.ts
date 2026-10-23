@@ -2,7 +2,8 @@ import { BATTLE_CONFIG as CFG, CHARACTER_STATS, SKILL_CONFIG as SKILL, type Char
 
 export type CommonRewardId = 'damage' | 'attackSpeed' | 'maxHp' | 'moveSpeed' | 'shotSpeed' | 'pickupRadius' | 'choices' | 'heal';
 export type SkillId = 'multiShot' | 'explosion' | 'soulHarvest' | 'homing' | 'swingRange' | 'bloodThirst' | 'deathLord';
-export type RewardId = CommonRewardId | SkillId;
+export type BossRewardId = 'bossSkill' | 'might' | 'barrier' | 'restore';
+export type RewardId = CommonRewardId | SkillId | BossRewardId;
 
 export interface RewardDef {
   name: string;
@@ -11,7 +12,14 @@ export interface RewardDef {
   // 직업 특기만 가진다. 특수 특기는 낮은 가중치로 뽑히고 한 번만 얻는다.
   character?: CharacterId;
   special?: boolean;
+  // 보스 처치 보상 선택창에만 나온다.
+  boss?: boolean;
 }
+
+// 보스 처치 보상의 효과량. 선택지 수는 '선택지 추가' 보상과 관계없이 고정이다.
+export const BOSS_REWARD = {
+  choices: 3, mightDamagePercent: 30, mightSpeedPercent: 10, barrierPercent: 15, barrierRegenMs: 8000, restoreMaxHp: 30,
+} as const;
 
 // 기본값 기준 고정 증가량을 더한다. 효과량과 최대 중첩은 플레이 테스트로 조정한다.
 export const REWARD_STEP = {
@@ -38,11 +46,28 @@ export const REWARDS: Record<RewardId, RewardDef> = {
   bloodThirst: { name: '피의 갈증', effect: `처치 시 회복 +${SKILL.bloodThirst.healStep}`, maxStacks: Infinity, character: 'deathKnight' },
   deathLord: { name: '죽음의 군주', effect: `공격력·이동속도·최대 체력 +${SKILL.deathLord.percent}%\n공격 간격 −${SKILL.deathLord.percent}%`,
     maxStacks: 1, character: 'deathKnight', special: true },
+  bossSkill: { name: '직업 특수 특기', effect: '이 직업의 특수 특기를\n바로 얻는다', maxStacks: 1, boss: true },
+  might: { name: '기사단장의 힘', effect: `공격력 +${BOSS_REWARD.mightDamagePercent}%\n이동속도 +${BOSS_REWARD.mightSpeedPercent}%`,
+    maxStacks: 1, boss: true },
+  barrier: { name: '성스러운 방벽', effect: `최대 체력의 ${BOSS_REWARD.barrierPercent}%를 막는 배리어\n`
+    + `${BOSS_REWARD.barrierRegenMs / 1000}초간 피해가 없으면 재생`, maxStacks: 1, boss: true },
+  restore: { name: '완전 회복', effect: `최대 체력 +${BOSS_REWARD.restoreMaxHp}\n체력 모두 회복`, maxStacks: 1, boss: true },
 };
 
 // 모든 직업에 공통인 보상. 직업 특기는 SKILL_IDS에 따로 둔다.
 export const REWARD_IDS: CommonRewardId[] = ['damage', 'attackSpeed', 'maxHp', 'moveSpeed', 'shotSpeed', 'pickupRadius', 'choices', 'heal'];
 export const SKILL_IDS: SkillId[] = ['multiShot', 'explosion', 'soulHarvest', 'homing', 'swingRange', 'bloodThirst', 'deathLord'];
+export const BOSS_REWARD_IDS: BossRewardId[] = ['bossSkill', 'might', 'barrier', 'restore'];
+
+// 직업의 특수 특기. 보스 보상 '직업 특수 특기'로 얻는 특기다.
+export function specialSkillOf(character: CharacterId): SkillId {
+  return SKILL_IDS.find((id) => REWARDS[id].character === character && REWARDS[id].special)!;
+}
+
+// 보스 보상 후보. 특수 특기를 이미 가졌으면 '직업 특수 특기'를 뺀다.
+export function bossRewardPool(stacks: RewardStacks, character: CharacterId): RewardId[] {
+  return BOSS_REWARD_IDS.filter((id) => id !== 'bossSkill' || stacks[specialSkillOf(character)] === 0);
+}
 
 // 직업 컨셉에 맞지 않는 공통 보상. 투사체가 없는 데스 나이트는 투사체 속도 강화를 받지 않는다.
 const EXCLUDED_REWARDS: Record<CharacterId, readonly CommonRewardId[]> = {
@@ -59,7 +84,7 @@ export function rewardPool(character: CharacterId): RewardId[] {
 export type RewardStacks = Record<RewardId, number>;
 
 export function emptyStacks(): RewardStacks {
-  return Object.fromEntries([...REWARD_IDS, ...SKILL_IDS].map((id) => [id, 0])) as RewardStacks;
+  return Object.fromEntries([...REWARD_IDS, ...SKILL_IDS, ...BOSS_REWARD_IDS].map((id) => [id, 0])) as RewardStacks;
 }
 
 export interface PlayerStats {
@@ -73,14 +98,16 @@ export interface PlayerStats {
 
 // 죽음의 군주는 공통 보상까지 더한 값에 비율로 적용한다.
 const lordScale = (stacks: RewardStacks): number => stacks.deathLord ? SKILL.deathLord.percent / 100 : 0;
+// 보스 보상 '기사단장의 힘'은 공통 보상과 직업 특기까지 더한 값에 곱한다.
+const mightScale = (stacks: RewardStacks, percent: number): number => 1 + (stacks.might ? percent / 100 : 0);
 
 // 최대 체력과 회복은 현재 체력과 함께 바뀌므로 전투에서 직접 적용하고, 나머지는 중첩 수로 계산한다.
 export function statsFor(stacks: RewardStacks, character: CharacterId = 'warlock'): PlayerStats {
   const base = CHARACTER_STATS[character], lord = lordScale(stacks);
   return {
-    damage: Math.round((base.damage + stacks.damage * REWARD_STEP.damage) * (1 + lord)),
+    damage: Math.round((base.damage + stacks.damage * REWARD_STEP.damage) * (1 + lord) * mightScale(stacks, BOSS_REWARD.mightDamagePercent)),
     attackMs: Math.round((base.attackMs - stacks.attackSpeed * REWARD_STEP.attackMs) * (1 - lord)),
-    speed: Math.round((base.speed + stacks.moveSpeed * REWARD_STEP.speed) * (1 + lord)),
+    speed: Math.round((base.speed + stacks.moveSpeed * REWARD_STEP.speed) * (1 + lord) * mightScale(stacks, BOSS_REWARD.mightSpeedPercent)),
     shotSpeed: CFG.playerShot.speed + stacks.shotSpeed * REWARD_STEP.shotSpeed,
     pickupRadius: CFG.player.pickupRadius + stacks.pickupRadius * REWARD_STEP.pickupRadius,
     choiceCount: BASE_CHOICES + stacks.choices * REWARD_STEP.choices,
@@ -88,7 +115,8 @@ export function statsFor(stacks: RewardStacks, character: CharacterId = 'warlock
 }
 
 export function maxHpFor(stacks: RewardStacks, character: CharacterId = 'warlock'): number {
-  return Math.round((CHARACTER_STATS[character].hp + stacks.maxHp * REWARD_STEP.maxHp) * (1 + lordScale(stacks)));
+  return Math.round((CHARACTER_STATS[character].hp + stacks.maxHp * REWARD_STEP.maxHp + stacks.restore * BOSS_REWARD.restoreMaxHp)
+    * (1 + lordScale(stacks)));
 }
 
 export interface SkillStats {

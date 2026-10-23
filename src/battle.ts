@@ -4,8 +4,8 @@ import { BATTLE_CONFIG as CFG, BOSS_CONFIG as BOSS, CHARACTER_STATS, ENEMY_STATS
 import { center, centerInView, contains, distanceSquared, edgeDistance, expand, overlaps, segmentHit, type Point } from './battle-geometry.ts';
 import { Navigation } from './navigation.ts';
 import { addExperience } from './experience.ts';
-import { REWARD_STEP, emptyStacks, maxHpFor, rewardPool, rollChoices, skillStatsFor, statsFor,
-  type PlayerStats, type RewardId, type SkillStats } from './rewards.ts';
+import { BOSS_REWARD, REWARD_STEP, bossRewardPool, emptyStacks, maxHpFor, rewardPool, rollChoices, skillStatsFor, specialSkillOf,
+  statsFor, type PlayerStats, type RewardId, type SkillStats } from './rewards.ts';
 
 export interface Actor extends Box {
   id: number;
@@ -160,20 +160,30 @@ export class Battle {
   skills: SkillStats;
   // 워록의 마력 폭주가 끝나는 게임 시간. 보상을 고를 때마다 이 시점부터 다시 계산한다.
   surgeUntil = -Infinity;
-  // 선택지가 열려 있는 동안 전투 전체가 일시정지된다.
+  // 선택지가 열려 있는 동안 전투 전체가 일시정지된다. 보스 보상 선택창은 레벨업 선택창보다 먼저 연다.
   choices: RewardId[] = [];
-  // 등장한 보스. 처치된 뒤에도 남겨 두어 표시에서 처치 여부를 알 수 있다.
+  choiceSource: 'level' | 'boss' = 'level';
+  // 보스 보상 '성스러운 방벽'의 남은 배리어. 체력보다 먼저 피해를 막는다.
+  barrier = 0;
+  // 등장한 보스와 등장한 게임 시간. 처치된 뒤에도 남겨 두어 표시에서 처치 여부를 알 수 있다.
   boss: Enemy | null = null;
+  bossAppearedAt = -Infinity;
   // 보스 범위 공격의 경고 목록과 신성 방벽이 끝나는 게임 시간.
   hazards: Hazard[] = [];
   bossGuardUntil = -Infinity;
   private pendingLevelUps = 0;
+  private pendingBossRewards = 0;
   // 경험치 배율로 생긴 1 미만의 경험치를 백분율 단위로 이월한다.
   private expCarry = 0;
 
   // 아직 보상을 고르지 않은 레벨업 수. 현재 열린 선택창을 포함한다.
   get pendingChoices(): number {
     return this.pendingLevelUps;
+  }
+
+  // 배리어의 최대치. '성스러운 방벽'을 얻은 뒤 현재 최대 체력의 일정 비율이다.
+  get barrierMax(): number {
+    return this.rewardStacks.barrier ? Math.round(this.player.maxHp * BOSS_REWARD.barrierPercent / 100) : 0;
   }
   private readonly obstacles: readonly Box[];
   private readonly navigation: Navigation;
@@ -281,6 +291,7 @@ export class Battle {
       const boss = this.spawnEnemy(BOSS.kind, view);
       if (boss) {
         this.boss = boss;
+        this.bossAppearedAt = this.time;
         this.nextBossAt = Infinity;
         this.nextBossActionAt = this.time + BOSS.firstActionMs;
       }
@@ -340,17 +351,32 @@ export class Battle {
     return readyAt > this.stepStart ? readyAt : this.time;
   }
 
+  // 신성 방벽이 유지되는 동안 보스와, 보스 중심 반경 안에 몸체가 닿은 적은 피해가 줄어든다.
+  private guarded(target: Actor): boolean {
+    const boss = this.boss;
+    if (!boss || boss.hp <= 0 || this.time >= this.bossGuardUntil || target === this.player) return false;
+    return target === boss || (this.enemies.includes(target as Enemy) && circleTouches(center(boss), BOSS.aegis.radius, target));
+  }
+
   dealDamage(target: Actor, damage: number): boolean {
     if (this.gameOver || target.hp <= 0 || !target.attackable) return false;
     if (target === this.player && this.time - target.lastHitAt < CFG.player.hurtMs) return false;
-    // 신성 방벽이 유지되는 동안 보스가 받는 피해를 줄인다.
-    if (target === this.boss && this.time < this.bossGuardUntil) damage = Math.round(damage * (100 - BOSS.aegis.reducePercent) / 100);
+    if (this.guarded(target)) damage = Math.round(damage * (100 - BOSS.aegis.reducePercent) / 100);
+    // 배리어가 체력보다 먼저 피해를 막는다. 다 막아도 피격으로 보아 피격 간격이 시작된다.
+    if (target === this.player && this.barrier > 0) {
+      const absorbed = Math.min(this.barrier, damage);
+      this.barrier -= absorbed;
+      damage -= absorbed;
+    }
     target.hp = Math.max(0, target.hp - damage);
     target.lastHitAt = this.time;
     // 살아 있던 적이 이 피해로 죽을 때만 구슬을 만들므로 처치 주체와 관계없이 한 번만 생긴다.
     if (target.hp === 0 && this.enemies.includes(target as Enemy)) this.dropOrb(target as Enemy);
-    // 보스가 죽으면 아직 끝나지 않은 범위 공격은 사라진다.
-    if (target.hp === 0 && target === this.boss) this.hazards = [];
+    // 보스가 죽으면 아직 끝나지 않은 범위 공격은 사라지고, 보스 보상 선택이 생긴다.
+    if (target.hp === 0 && target === this.boss) {
+      this.hazards = [];
+      this.pendingBossRewards++;
+    }
     if (target === this.player && target.hp === 0) {
       this.gameOver = true;
       for (const ally of this.allies) ally.hp = 0;
@@ -395,26 +421,37 @@ export class Battle {
     this.orbs = remaining;
   }
 
-  // 오른 레벨 수만큼 선택창을 순서대로 열고, 매번 그 시점의 보상 상태로 새로 구성한다.
+  // 보스 보상 선택창을 먼저 열고, 이어서 오른 레벨 수만큼 선택창을 순서대로 연다. 매번 그 시점의 보상 상태로 새로 구성한다.
   private openNextChoices(): void {
-    if (this.gameOver || this.choices.length || this.pendingLevelUps <= 0) return;
-    this.choices = rollChoices(this.rewardStacks, this.stats.choiceCount, this.random, rewardPool(this.character));
+    if (this.gameOver || this.choices.length) return;
+    if (this.pendingBossRewards > 0) {
+      this.choiceSource = 'boss';
+      this.choices = rollChoices(this.rewardStacks, BOSS_REWARD.choices, this.random, bossRewardPool(this.rewardStacks, this.character));
+    } else if (this.pendingLevelUps > 0) {
+      this.choiceSource = 'level';
+      this.choices = rollChoices(this.rewardStacks, this.stats.choiceCount, this.random, rewardPool(this.character));
+    }
   }
 
   choose(index: number): boolean {
     if (this.gameOver || !Number.isInteger(index) || index < 0 || index >= this.choices.length) return false;
     const id = this.choices[index];
     this.choices = [];
-    this.pendingLevelUps--;
+    if (this.choiceSource === 'boss') this.pendingBossRewards--;
+    else {
+      this.pendingLevelUps--;
+      // 마력 폭주: 레벨업 보상을 고른 시점부터 지속 시간을 다시 센다. 연속 레벨업에서도 누적하지 않는다.
+      if (this.character === 'warlock') this.surgeUntil = this.time + SKILL.surge.durationMs;
+    }
     this.applyReward(id);
-    // 마력 폭주: 보상을 고른 시점부터 지속 시간을 다시 센다. 연속 레벨업에서도 누적하지 않는다.
-    if (this.character === 'warlock') this.surgeUntil = this.time + SKILL.surge.durationMs;
     this.openNextChoices();
     return true;
   }
 
   applyReward(id: RewardId): void {
     this.rewardStacks[id]++;
+    // '직업 특수 특기'는 그 직업의 특수 특기를 얻는 것과 같다.
+    if (id === 'bossSkill') this.rewardStacks[specialSkillOf(this.character)]++;
     // 최대 체력이 늘어난 만큼 현재 체력도 늘린다. 최대 체력 강화와 죽음의 군주가 함께 쓴다.
     const maxHp = maxHpFor(this.rewardStacks, this.character);
     this.player.hp += maxHp - this.player.maxHp;
@@ -423,6 +460,9 @@ export class Battle {
       this.player.hp = Math.min(this.player.maxHp,
         this.player.hp + Math.floor(this.player.maxHp * REWARD_STEP.healPercent / 100));
     }
+    // 완전 회복은 늘어난 최대 체력까지 회복하고, 성스러운 방벽은 배리어를 가득 채운 상태로 얻는다.
+    if (id === 'restore') this.player.hp = this.player.maxHp;
+    if (id === 'barrier') this.barrier = this.barrierMax;
     this.stats = statsFor(this.rewardStacks, this.character);
     this.skills = skillStatsFor(this.rewardStacks, this.character);
   }
@@ -670,6 +710,8 @@ export class Battle {
     this.origins.clear();
     for (const actor of this.allies) this.origins.set(actor, { x: actor.x, y: actor.y });
     for (const enemy of this.enemies) this.origins.set(enemy, { x: enemy.x, y: enemy.y });
+    // 배리어는 마지막 피격 뒤 일정 시간 동안 피해를 받지 않으면 다시 가득 찬다.
+    if (this.barrier < this.barrierMax && this.time - this.player.lastHitAt >= BOSS_REWARD.barrierRegenMs) this.barrier = this.barrierMax;
     this.effects = this.effects.filter((effect) => this.time - effect.at < SKILL.effectMs);
     const length = Math.hypot(input.x, input.y);
     if (length) {

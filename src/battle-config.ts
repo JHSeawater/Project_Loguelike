@@ -69,7 +69,8 @@ export const BOSS_CONFIG = {
   // 보스 중심에서 상하좌우로 뻗는 십자. 경고하는 동안 보스는 멈춘다.
   cross: { width: 60, length: 500, warnMs: 1200, damage: 30 },
   rally: { kind: 'soldier', count: 4, spread: 90 },
-  aegis: { durationMs: 5000, reducePercent: 70 },
+  // 방벽은 보스와, 보스 중심에서 반경 안에 몸체가 닿은(경계 포함) 적이 받는 피해를 줄인다.
+  aegis: { durationMs: 5000, reducePercent: 70, radius: 160 },
 } as const;
 
 export interface SpawnStage {

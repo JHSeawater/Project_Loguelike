@@ -5,13 +5,15 @@ import { getFootDepth } from './render-depth';
 import { Battle, crossArms } from './battle';
 import { BATTLE_CONFIG, BOSS_CONFIG, CHARACTER_STATS, ENEMY_STATS, SKILL_CONFIG, type CharacterId } from './battle-config';
 import { experienceToNextLevel } from './experience';
-import { REWARDS, type RewardDef, type RewardId } from './rewards';
+import { REWARDS, specialSkillOf, type RewardDef, type RewardId } from './rewards';
 import { CharacterSelectScene, FONT, INPUT_DELAY_MS, TitleScene } from './menu-scenes';
 import './style.css';
 
 const CHOICE_CARD = { width: 220, height: 250, gap: 20, top: 230 };
-// 카드 테두리: 공통 보상, 직업 무한 특기, 특수 특기를 구분한다.
-const cardStroke = (reward: RewardDef): number => reward.special ? 0xe0b84a : reward.character ? 0x9b7ad8 : 0x5f7a70;
+// 카드 테두리: 공통 보상, 직업 무한 특기, 특수 특기, 보스 보상을 구분한다.
+const cardStroke = (reward: RewardDef): number => reward.boss ? 0xe8743a : reward.special ? 0xe0b84a : reward.character ? 0x9b7ad8 : 0x5f7a70;
+// 보스 체력 바는 HUD 패널 오른쪽 위에 둔다.
+const BOSS_BAR = { x: 676, y: 44, width: 576, height: 10 };
 
 class GameScene extends Phaser.Scene {
   private character: CharacterId = 'warlock';
@@ -27,6 +29,11 @@ class GameScene extends Phaser.Scene {
   private healthFill!: Phaser.GameObjects.Rectangle;
   private expFill!: Phaser.GameObjects.Rectangle;
   private levelText!: Phaser.GameObjects.Text;
+  private barrierFill!: Phaser.GameObjects.Rectangle;
+  private bossPanel!: Phaser.GameObjects.GameObject[];
+  private bossName!: Phaser.GameObjects.Text;
+  private bossFill!: Phaser.GameObjects.Rectangle;
+  private bossNotice!: Phaser.GameObjects.Text;
   private shownGameOver = false;
   private gameOverAt = 0;
   private choiceViews: Phaser.GameObjects.GameObject[] = [];
@@ -86,6 +93,18 @@ class GameScene extends Phaser.Scene {
     this.expFill = this.add.rectangle(24, 65, 180, 6, 0x6fb8ff).setOrigin(0).setScrollFactor(0).setDepth(20002);
     this.levelText = this.add.text(216, 52, '', { fontFamily: 'Malgun Gothic, sans-serif', fontSize: '14px', color: '#9fd0ff' })
       .setScrollFactor(0).setDepth(20001);
+    // 성스러운 방벽의 배리어는 체력 바 바로 위의 하늘색 바로 표시한다. 얻기 전에는 숨긴다.
+    this.barrierFill = this.add.rectangle(24, 45, 180, 3, 0x9fe6ff).setOrigin(0).setScrollFactor(0).setDepth(20002).setVisible(false);
+    // 보스 이름과 체력 바. 보스가 살아 있는 동안만 보인다.
+    const bossBack = this.add.rectangle(660, 12, 608, 52, 0x101612, 0.9).setOrigin(0).setScrollFactor(0).setDepth(20000);
+    this.bossName = this.add.text(BOSS_BAR.x, 18, '', { fontFamily: FONT, fontSize: '17px', color: '#f0d890' }).setScrollFactor(0).setDepth(20001);
+    const bossTrack = this.add.rectangle(BOSS_BAR.x, BOSS_BAR.y, BOSS_BAR.width, BOSS_BAR.height, 0x383d32).setOrigin(0).setScrollFactor(0).setDepth(20001);
+    this.bossFill = this.add.rectangle(BOSS_BAR.x, BOSS_BAR.y, BOSS_BAR.width, BOSS_BAR.height, 0xd85a4a).setOrigin(0).setScrollFactor(0).setDepth(20002);
+    this.bossPanel = [bossBack, this.bossName, bossTrack, this.bossFill];
+    for (const view of this.bossPanel) (view as Phaser.GameObjects.Rectangle).setVisible(false);
+    this.bossNotice = this.add.text(640, 210, `${ENEMY_STATS[BOSS_CONFIG.kind].name} 출현`, {
+      fontFamily: FONT, fontSize: '36px', color: '#f0d890', stroke: '#101612', strokeThickness: 6,
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(20003).setVisible(false);
     // 적 범례는 한 줄에 5종씩 두 줄로 표시한다.
     Object.values(ENEMY_STATS).forEach((stats, index) => {
       this.add.text(24 + index % 5 * 105, 80 + Math.floor(index / 5) * 20, `■ ${stats.name}`, {
@@ -178,12 +197,12 @@ class GameScene extends Phaser.Scene {
     for (const [id, view] of this.hazardViews) {
       if (!liveHazards.has(id)) { view.destroy(); this.hazardViews.delete(id); }
     }
-    // 신성 방벽이 유지되는 동안 보스 주위에 금색 원을 표시한다.
+    // 신성 방벽이 유지되는 동안 보호 범위(보스 중심 반경)를 금색 원으로 표시한다.
     const boss = battle.boss;
     if (boss && boss.hp > 0 && battle.time < battle.bossGuardUntil) {
-      this.aegisView ??= this.add.circle(0, 0, 1, BOSS_CONFIG.strokeColor, 0.12).setStrokeStyle(3, BOSS_CONFIG.strokeColor).setDepth(9001);
-      this.aegisView.setPosition(boss.x + boss.width / 2, boss.y + boss.height / 2)
-        .setRadius(Math.hypot(boss.width, boss.height) / 2 + 8).setVisible(true);
+      this.aegisView ??= this.add.circle(0, 0, BOSS_CONFIG.aegis.radius, BOSS_CONFIG.strokeColor, 0.1)
+        .setStrokeStyle(3, BOSS_CONFIG.strokeColor).setDepth(9001);
+      this.aegisView.setPosition(boss.x + boss.width / 2, boss.y + boss.height / 2).setVisible(true);
     } else this.aegisView?.setVisible(false);
     const liveShots = new Set<number>();
     for (const shot of battle.projectiles) {
@@ -237,6 +256,17 @@ class GameScene extends Phaser.Scene {
     const surgeLeft = battle.surgeUntil - battle.time;
     this.levelText.setText(`Lv ${battle.level}   ${battle.experience}/${need}`
       + (surgeLeft > 0 ? `    마력 폭주 ${(surgeLeft / 1000).toFixed(1)}초` : ''));
+    const barrierMax = battle.barrierMax;
+    this.barrierFill.setVisible(barrierMax > 0);
+    if (barrierMax > 0) this.barrierFill.setDisplaySize(180 * battle.barrier / barrierMax, 3);
+    // 보스 체력 바와 등장 알림(게임 시간 2초).
+    const bossAlive = Boolean(boss && boss.hp > 0);
+    for (const view of this.bossPanel) (view as Phaser.GameObjects.Rectangle).setVisible(bossAlive);
+    if (boss && bossAlive) {
+      this.bossName.setText(`${ENEMY_STATS[boss.kind].name}   ${boss.hp}/${boss.maxHp}`);
+      this.bossFill.setDisplaySize(BOSS_BAR.width * boss.hp / boss.maxHp, BOSS_BAR.height);
+    }
+    this.bossNotice.setVisible(!battle.gameOver && battle.time - battle.bossAppearedAt < 2000);
     // 선택할 때마다 새 선택지 배열이 만들어지므로 연속 레벨업에서도 창을 다시 구성한다.
     if (battle.choices !== this.shownChoices) this.showChoices(battle.choices);
     if (battle.gameOver && !this.shownGameOver) {
@@ -267,13 +297,17 @@ class GameScene extends Phaser.Scene {
     };
     // HUD 위, 게임 종료 화면 아래에 그린다. 연속 레벨업은 앞선 레벨부터 순서대로 표시한다.
     const rewardLevel = this.battle.level - this.battle.pendingChoices + 1;
+    const title = this.battle.choiceSource === 'boss' ? `${ENEMY_STATS[BOSS_CONFIG.kind].name} 처치 · 보상을 선택하세요`
+      : `레벨 ${rewardLevel} 달성 · 보상을 선택하세요`;
     fixed(this.add.rectangle(640, 360, 1280, 720, 0x060a08, 0.72), 25000);
-    fixed(this.add.text(640, 175, `레벨 ${rewardLevel} 달성 · 보상을 선택하세요`, {
+    fixed(this.add.text(640, 175, title, {
       fontFamily: FONT, fontSize: '28px', color: '#e5e3c8',
     }).setOrigin(0.5), 25001);
     const total = choices.length * CHOICE_CARD.width + (choices.length - 1) * CHOICE_CARD.gap;
     choices.forEach((id, index) => {
-      const reward = REWARDS[id];
+      // '직업 특수 특기'는 실제로 얻게 될 그 직업의 특수 특기를 보여 준다.
+      const special = REWARDS[specialSkillOf(this.battle.character)];
+      const reward = id === 'bossSkill' ? { ...REWARDS[id], effect: `${special.name} 획득\n${special.effect}` } : REWARDS[id];
       const x = 640 - total / 2 + index * (CHOICE_CARD.width + CHOICE_CARD.gap) + CHOICE_CARD.width / 2;
       const y = CHOICE_CARD.top + CHOICE_CARD.height / 2;
       const stroke = cardStroke(reward);
@@ -284,7 +318,7 @@ class GameScene extends Phaser.Scene {
         .on('pointerout', () => card.setStrokeStyle(2, stroke))
         .on('pointerdown', () => this.pickChoice(index));
       const stacks = this.battle.rewardStacks[id];
-      const stackText = reward.special ? '특수 특기 · 1회 획득'
+      const stackText = reward.boss ? '보스 보상' : reward.special ? '특수 특기 · 1회 획득'
         : Number.isFinite(reward.maxStacks) ? `중첩 ${stacks}/${reward.maxStacks}`
         : reward.character ? `직업 특기 · 중첩 ${stacks}` : '중첩 제한 없음';
       const lines: [number, string, string, string][] = [

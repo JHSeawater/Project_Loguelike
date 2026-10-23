@@ -154,7 +154,7 @@ test('the rally summons four soldiers within 90px of the commander, on screen if
   assert.equal(full.enemies.filter((enemy) => enemy.kind === 'soldier').length, 30);
 });
 
-test('the holy aegis cuts damage to the commander by 70% for exactly 5s', () => {
+test('the holy aegis cuts damage by 70% for exactly 5s to the commander and enemies touching its 160px radius', () => {
   const battle = knightBattle();
   const boss = placeBoss(battle, 2300, 1455, 5, 0);
   run(battle, 20);
@@ -164,9 +164,111 @@ test('the holy aegis cuts damage to the commander by 70% for exactly 5s', () => 
   assert.equal(battle.time, 5000);
   battle.dealDamage(boss, 10);
   assert.equal(boss.hp, 1797);
+  // 보스 중심에서 병사 몸체까지 정확히 160px이면 범위 안, 160.5px이면 범위 밖이다.
+  const { x, y } = center(boss);
+  const inside = createEnemy(600, 'soldier', x + 160, y - 20);
+  const outside = createEnemy(601, 'soldier', x + 160.5, y + 30);
+  battle.enemies.push(inside, outside);
+  battle.dealDamage(inside, 10);
+  battle.dealDamage(outside, 10);
+  assert.deepEqual([inside.hp, outside.hp], [22, 15]);
+  // 플레이어는 방벽의 영향을 받지 않는다.
+  battle.dealDamage(battle.player, 10);
+  assert.equal(battle.player.hp, 130);
   run(battle, 20);
   battle.dealDamage(boss, 10);
-  assert.equal(boss.hp, 1787);
+  battle.dealDamage(inside, 10);
+  assert.deepEqual([boss.hp, inside.hp], [1787, 12]);
+});
+
+test('killing the commander opens a boss reward window of 3 before pending level-ups, and game over still wins', () => {
+  const battle = knightBattle();
+  const boss = placeBoss(battle, 2300, 1455, 0, Infinity);
+  battle.dealDamage(boss, 1800);
+  // 같은 단계에 경험치 5를 얻어 레벨도 오른다.
+  const player = center(battle.player);
+  battle.orbs.push({ id: 900, x: player.x - 6, y: player.y - 6, width: 12, height: 12, value: 5, pulled: false });
+  run(battle, 20);
+  assert.equal(battle.choiceSource, 'boss');
+  assert.equal(battle.choices.length, 3);
+  assert.equal(new Set(battle.choices).size, 3);
+  assert.ok(battle.choices.every((id) => ['bossSkill', 'might', 'barrier', 'restore'].includes(id)));
+  const time = battle.time;
+  run(battle, 1000);
+  assert.equal(battle.time, time, 'paused while choosing');
+  assert.ok(battle.choose(0));
+  assert.equal(battle.choiceSource, 'level');
+  assert.equal(battle.choices.length, 3);
+  assert.ok(battle.choices.every((id) => !['bossSkill', 'might', 'barrier', 'restore'].includes(id)));
+
+  // 특수 특기를 이미 가졌으면 나머지 3개만 나온다.
+  const owned = knightBattle();
+  owned.applyReward('deathLord');
+  owned.dealDamage(placeBoss(owned, 2300, 1455, 0, Infinity), 1800);
+  run(owned, 20);
+  assert.deepEqual(new Set(owned.choices), new Set(['might', 'barrier', 'restore']));
+
+  // 보스 처치와 플레이어 사망이 같은 단계면 게임 종료가 우선한다.
+  const dying = knightBattle();
+  dying.player.hp = 5;
+  dying.dealDamage(placeBoss(dying, 2300, 1455, 0, Infinity), 1800);
+  dying.projectiles.push({ id: 901, team: 'enemy', x: 1460, y: 1496, width: 10, height: 10,
+    vx: 10000, vy: 0, damage: 10, color: 0xffffff, expiresAt: 5000 });
+  run(dying, 20);
+  assert.ok(dying.gameOver);
+  assert.deepEqual(dying.choices, []);
+});
+
+test('boss rewards grant the class special skill, the commander\'s might and a full restore, without a warlock surge', () => {
+  const warlock = new Battle([], { spawning: false });
+  warlock.applyReward('bossSkill');
+  assert.equal(warlock.rewardStacks.homing, 1);
+  assert.equal(warlock.skills.homing, true);
+  // 기사단장의 힘: 공격력 ×1.3(반올림), 이동속도 ×1.1. 공격력 강화 3회(16)면 20.8 → 21이다.
+  const strong = new Battle([], { spawning: false });
+  for (let i = 0; i < 3; i++) strong.applyReward('damage');
+  strong.applyReward('might');
+  assert.deepEqual([strong.stats.damage, strong.stats.speed], [21, 275]);
+  // 데스 나이트는 죽음의 군주(×1.2)까지 곱한다: 14 × 1.2 × 1.3 = 21.84 → 22, 230 × 1.2 × 1.1 = 303.6 → 304.
+  const knight = knightBattle();
+  knight.applyReward('bossSkill');
+  knight.applyReward('might');
+  assert.equal(knight.rewardStacks.deathLord, 1);
+  assert.deepEqual([knight.stats.damage, knight.stats.speed, knight.player.maxHp], [22, 304, 168]);
+  // 완전 회복: 최대 체력 +30, 체력을 최대치까지 회복한다.
+  const hurt = new Battle([], { spawning: false });
+  hurt.player.hp = 50;
+  hurt.applyReward('restore');
+  assert.deepEqual([hurt.player.hp, hurt.player.maxHp], [130, 130]);
+  // 보스 보상을 골라도 워록의 마력 폭주는 시작되지 않는다.
+  const chooser = new Battle([], { spawning: false });
+  chooser.dealDamage(placeBoss(chooser, 2600, 1455, 0, Infinity), 1800);
+  run(chooser, 20);
+  assert.equal(chooser.choiceSource, 'boss');
+  chooser.choose(0);
+  assert.equal(chooser.surgeUntil, -Infinity);
+});
+
+test('the holy barrier absorbs damage before health, keeps the 3s hurt cooldown, and refills after 8s without damage', () => {
+  const battle = new Battle([], { spawning: false });
+  battle.applyReward('barrier');
+  // 최대 체력 100의 15% = 15.
+  assert.deepEqual([battle.barrier, battle.barrierMax], [15, 15]);
+  battle.dealDamage(battle.player, 10);
+  assert.deepEqual([battle.barrier, battle.player.hp], [5, 100]);
+  // 배리어가 막아도 피격 간격 3초가 시작된다.
+  assert.equal(battle.dealDamage(battle.player, 20), false);
+  run(battle, 3000);
+  battle.dealDamage(battle.player, 25);
+  assert.deepEqual([battle.barrier, battle.player.hp], [0, 80]);
+  // 마지막 피격(3.0초)에서 8초가 지난 11.0초에 다시 가득 찬다.
+  run(battle, 7980);
+  assert.equal(battle.barrier, 0);
+  run(battle, 20);
+  assert.equal(battle.barrier, 15);
+  // 최대 체력이 늘면 배리어 최대치도 늘어난다(120의 15% = 18).
+  battle.applyReward('maxHp');
+  assert.equal(battle.barrierMax, 18);
 });
 
 test('killing the commander cancels pending attacks, drops one 30-experience orb, and stops its actions', () => {
