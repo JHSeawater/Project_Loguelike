@@ -152,6 +152,8 @@ export class Battle {
   private ringIndex = 0;
   private lastPlayerAttackAt = -Infinity;
   private pathBudget = 0;
+  // 현재 단계가 시작된 게임 시간. 주기 동작이 이번 단계 안에서 준비됐는지 판단한다.
+  private stepStart = 0;
 
   constructor(obstacles: readonly Box[],
     options: { spawning?: boolean; random?: () => number; character?: CharacterId } = {}) {
@@ -226,7 +228,7 @@ export class Battle {
     const stage = stageAt(this.time);
     if (this.time >= this.nextSpawnAt) {
       for (let i = 0; i < stage.count; i++) this.spawnEnemy(pickSpawnKind(this.time, this.random), view);
-      this.nextSpawnAt = this.time + stage.everyMs;
+      this.nextSpawnAt = this.intervalFrom(this.nextSpawnAt) + stage.everyMs;
     }
     const group = SPAWN_PATTERNS.zealotGroup;
     if (this.time >= this.nextGroupAt) {
@@ -239,6 +241,13 @@ export class Battle {
       this.ringIndex++;
       this.spawnRing(view);
     }
+  }
+
+  // 주기 동작의 다음 간격을 셀 기준 시각. 이번 단계 안에서 준비됐으면 준비된 시각부터 세어, 프레임 간격이
+  // 주기로 나누어떨어지지 않아도 늦어진 만큼이 쌓이지 않게 한다. 이전 단계부터 대상이 없거나 사거리 밖이라
+  // 기다리고 있었으면 지금부터 센다.
+  private intervalFrom(readyAt: number): number {
+    return readyAt > this.stepStart ? readyAt : this.time;
   }
 
   dealDamage(target: Actor, damage: number): boolean {
@@ -450,12 +459,12 @@ export class Battle {
       if (stats.heal) {
         if (this.time >= enemy.nextAttackAt) {
           this.healAround(enemy, stats.heal.radius, stats.heal.amount);
-          enemy.nextAttackAt = this.time + stats.attackMs;
+          enemy.nextAttackAt = this.intervalFrom(enemy.nextAttackAt) + stats.attackMs;
         }
       } else if (stats.ranged) {
         if (distanceSquared(enemy, target) <= stats.range ** 2 && this.time >= enemy.nextAttackAt) {
           this.fire(enemy, target, 'enemy', stats.damage, stats.color, stats.shotSpeed ?? CFG.enemyShot.speed);
-          enemy.nextAttackAt = this.time + stats.attackMs;
+          enemy.nextAttackAt = this.intervalFrom(enemy.nextAttackAt) + stats.attackMs;
         }
       } else if (edgeDistance(enemy, target) <= 0.75
         && !this.obstacles.some((obstacle) => segmentHit(center(enemy), center(target), obstacle) !== null)) {
@@ -542,6 +551,7 @@ export class Battle {
   private step(dt: number, input: Point, viewForPlayer: (player: Actor) => Box): void {
     // 단계 시작 시점의 능력치를 쓴다. 마력 폭주는 끝나는 시점에 시작하는 단계부터 풀린다.
     const power = this.currentStats();
+    this.stepStart = this.time;
     this.time += dt;
     this.effects = this.effects.filter((effect) => this.time - effect.at < SKILL.effectMs);
     const length = Math.hypot(input.x, input.y);
@@ -556,14 +566,15 @@ export class Battle {
     if (this.spawning) this.spawnWaves(view);
     this.updateEnemies(dt);
     if (this.gameOver) return;
-    if (this.time - this.lastPlayerAttackAt >= power.attackMs) {
+    const attackReadyAt = this.lastPlayerAttackAt + power.attackMs;
+    if (this.time >= attackReadyAt) {
       if (CHARACTER_STATS[this.character].attack === 'swing') {
-        if (this.swing(power.damage)) this.lastPlayerAttackAt = this.time;
+        if (this.swing(power.damage)) this.lastPlayerAttackAt = this.intervalFrom(attackReadyAt);
       } else {
         const target = nearestTarget(this.player, this.enemies, view);
         if (target) {
           this.fireVolley(target, power.damage);
-          this.lastPlayerAttackAt = this.time;
+          this.lastPlayerAttackAt = this.intervalFrom(attackReadyAt);
         }
       }
     }

@@ -78,7 +78,8 @@ class GameScene extends Phaser.Scene {
     this.add.rectangle(24, 50, 180, 10, 0x383d32).setOrigin(0).setScrollFactor(0).setDepth(20001);
     this.healthFill = this.add.rectangle(24, 50, 180, 10, 0x66ddaa).setOrigin(0).setScrollFactor(0).setDepth(20002);
     this.add.rectangle(24, 65, 180, 6, 0x383d32).setOrigin(0).setScrollFactor(0).setDepth(20001);
-    this.expFill = this.add.rectangle(24, 65, 0, 6, 0x6fb8ff).setOrigin(0).setScrollFactor(0).setDepth(20002);
+    // 표시 크기는 원래 크기에 대한 배율로 바뀌므로, 바는 전체 너비로 만들고 비율만큼 줄인다. 너비 0으로 만들면 늘릴 수 없다.
+    this.expFill = this.add.rectangle(24, 65, 180, 6, 0x6fb8ff).setOrigin(0).setScrollFactor(0).setDepth(20002);
     this.levelText = this.add.text(216, 52, '', { fontFamily: 'Malgun Gothic, sans-serif', fontSize: '14px', color: '#9fd0ff' })
       .setScrollFactor(0).setDepth(20001);
     // 적 범례는 한 줄에 5종씩 두 줄로 표시한다.

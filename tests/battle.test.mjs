@@ -537,6 +537,70 @@ test('auto attack and spawning keep their intervals at 100ms frames', () => {
   assert.equal(spawnsIn(100), 4);
 });
 
+test('attack, heal and spawn intervals do not stretch at frame sizes that do not divide them', () => {
+  // 60FPS(약 16.7ms)·30ms·30FPS(약 33.3ms)·45ms 프레임은 0.5·0.8·1·3·5초 간격을 나누어떨어지게 하지 못한다.
+  // 프레임이 50ms 이하라 update 한 번이 한 단계이므로, 새 id가 처음 보인 시각이 그 동작이 일어난 단계의 시각이다.
+  const frames = [1000 / 60, 30, 1000 / 30, 45];
+  const watch = (battle, frame, ms, sources) => {
+    const logs = sources.map(() => ({ seen: new Set(), times: [] }));
+    for (let i = Math.round(ms / frame); i > 0; i--) {
+      battle.update(frame, { x: 0, y: 0 }, stillView);
+      sources.forEach((items, index) => {
+        for (const item of items(battle)) {
+          if (logs[index].seen.has(item.id)) continue;
+          logs[index].seen.add(item.id); logs[index].times.push(battle.time);
+        }
+      });
+    }
+    return logs.map((log) => log.times);
+  };
+  // k번째 동작은 첫 동작 + k × 간격에 준비되므로 그 시점부터 한 프레임 안에 일어나야 한다. 늦어진 만큼이 다음 간격에 쌓이면 안 된다.
+  // 시각은 프레임 간격의 부동소수점 합이므로 1e-6ms 오차를 허용한다.
+  const expectEvery = (times, interval, frame, end, label) => {
+    assert.equal(times.length, Math.floor((end - times[0]) / interval + 1e-6) + 1, `${label} count`);
+    times.forEach((time, k) => {
+      const due = times[0] + k * interval;
+      assert.ok(time >= due - 1e-6 && time < due + frame + 1e-6, `${label} #${k}: ${time} (due ${due})`);
+    });
+  };
+  // 플레이어를 벽으로 둘러싸 근접 적이 닿지 못하게 한다. 투사체와 회복은 장애물에 막히지 않는다.
+  const walls = [{ x: 1460, y: 1460, width: 80, height: 10 }, { x: 1460, y: 1530, width: 80, height: 10 },
+    { x: 1460, y: 1460, width: 10, height: 80 }, { x: 1530, y: 1460, width: 10, height: 80 }];
+  for (const frame of frames) {
+    const label = `${frame.toFixed(1)}ms`;
+    const battle = new Battle(walls, { spawning: false });
+    const archer = createEnemy(100, 'archer', 1480, 1700);
+    const priest = createEnemy(101, 'priest', 1700, 1480);
+    // 사제 회복 반경에 닿아 있고, 회복해도 최대 체력에 닿지 않는 성기사
+    const wounded = createEnemy(102, 'paladin', 1760, 1440);
+    for (const enemy of [archer, priest]) enemy.hp = enemy.maxHp = 1e9;
+    wounded.maxHp = 1e9; wounded.hp = 1e8;
+    battle.enemies.push(archer, priest, wounded);
+    const [shots, bolts, heals] = watch(battle, frame, 36_000, [
+      (b) => b.projectiles.filter((shot) => shot.team === 'ally'),
+      (b) => b.projectiles.filter((shot) => shot.team === 'enemy'),
+      (b) => b.effects.filter((effect) => effect.kind === 'heal'),
+    ]);
+    // 워록 0.5초, 궁사 5초, 사제 3초
+    expectEvery(shots, 500, frame, battle.time, `warlock ${label}`);
+    expectEvery(bolts, 5000, frame, battle.time, `archer ${label}`);
+    expectEvery(heals, 3000, frame, battle.time, `priest ${label}`);
+
+    const knight = new Battle([], { spawning: false, character: 'deathKnight' });
+    knight.player.hp = knight.player.maxHp = 1e6;
+    const dummy = createEnemy(100, 'soldier', 1530, 1480);
+    dummy.hp = dummy.maxHp = 1e9;
+    knight.enemies.push(dummy);
+    const [swings] = watch(knight, frame, 36_000, [(b) => b.effects.filter((effect) => effect.kind === 'swing')]);
+    expectEvery(swings, 800, frame, knight.time, `death knight ${label}`);
+
+    const spawning = new Battle([], { random: seeded(31) });
+    spawning.player.hp = 10000;
+    const [spawns] = watch(spawning, frame, 18_000, [(b) => b.enemies]);
+    expectEvery(spawns, 1000, frame, spawning.time, `spawn ${label}`);
+  }
+});
+
 test('a level up or death inside a long frame stops the rest of that frame', () => {
   const leveling = new Battle([], { spawning: false });
   const player = center(leveling.player);
