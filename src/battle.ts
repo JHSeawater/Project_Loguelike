@@ -24,6 +24,8 @@ export interface Enemy extends Actor {
   path: Point[];
   pathIndex: number;
   stuckMs: number;
+  // 원거리 적·사제가 사거리 안에서 멈춰 있는지. 멈춘 동안은 다른 적의 이동을 막지 않는다.
+  holding: boolean;
 }
 
 export interface Projectile extends Box {
@@ -62,7 +64,7 @@ export function createEnemy(id: number, kind: EnemyKind, x: number, y: number, n
   const hp = Math.round(stats.hp * hpPercent / 100);
   return { id, kind, x, y, width: stats.width, height: stats.height, hp, maxHp: hp,
     attackable: true, lastHitAt: -Infinity, targetId: null, nextThinkAt: now,
-    nextPathAt: now, nextAttackAt: now, path: [], pathIndex: 0, stuckMs: 0 };
+    nextPathAt: now, nextAttackAt: now, path: [], pathIndex: 0, stuckMs: 0, holding: false };
 }
 
 // 게임 시간에 해당하는 생성 단계. 경계 시점부터 다음 단계를 쓴다.
@@ -158,6 +160,8 @@ export class Battle {
   private stepStart = 0;
   // 단계 시작 시점의 몸체 위치. 투사체는 몸체가 이 위치에서 지금 위치까지 움직인 것으로 보고 판정한다.
   private readonly origins = new Map<Actor, Point>();
+  // 적이 움직일 때 다른 적의 막는 범위를 담는 상자. 이동마다 다시 채워 쓴다.
+  private readonly enemyBlockers: Box[] = [];
 
   constructor(obstacles: readonly Box[],
     options: { spawning?: boolean; random?: () => number; character?: CharacterId } = {}) {
@@ -401,7 +405,8 @@ export class Battle {
 
   private moveEnemy(enemy: Enemy, target: Actor, dt: number): void {
     const stats = ENEMY_STATS[enemy.kind];
-    if (stats.ranged && distanceSquared(enemy, target) <= stats.range ** 2) return;
+    enemy.holding = stats.ranged && distanceSquared(enemy, target) <= stats.range ** 2;
+    if (enemy.holding) return;
     if (!stats.ranged && edgeDistance(enemy, target) <= 0.75) return;
     const from = center(enemy), destination = center(target);
     let waypoint: Point | undefined;
@@ -424,9 +429,19 @@ export class Battle {
     const length = Math.hypot(dx, dy);
     if (length < 0.001) return;
     const distance = Math.min(length, stats.speed * dt / 1000);
-    const blockers = [...this.obstacles,
-      ...this.allies.filter((actor) => actor.hp > 0),
-      ...this.enemies.filter((other) => other !== enemy && other.hp > 0)];
+    // 적끼리는 서로 몸체 위쪽 통과 영역을 뺀 아래쪽끼리만 막는다. 다른 적의 막는 범위를 그 적의 통과 영역만큼
+    // 위에서, 이 적의 통과 영역만큼 아래에서 줄이면 두 아래쪽 몸체가 겹칠 때만 부딪힌다.
+    // 사거리 안에서 멈춘 원거리 적·사제는 막지 않아, 그 뒤의 적이 줄을 지나 다가갈 수 있다.
+    // 매 이동마다 상자를 새로 만들지 않도록 재사용한다.
+    const lift = enemy.height * CFG.enemyPassTop;
+    let count = 0;
+    for (const other of this.enemies) {
+      if (other === enemy || other.hp <= 0 || other.holding) continue;
+      const inset = other.height * CFG.enemyPassTop;
+      const box = this.enemyBlockers[count++] ??= { x: 0, y: 0, width: 0, height: 0 };
+      box.x = other.x; box.y = other.y + inset; box.width = other.width; box.height = other.height - inset - lift;
+    }
+    const blockers = [...this.obstacles, ...this.allies.filter((actor) => actor.hp > 0), ...this.enemyBlockers.slice(0, count)];
     let moved = moveAndSlide(enemy, dx / length * distance, dy / length * distance, CFG.world, blockers);
     const progress = Math.hypot(moved.x - enemy.x, moved.y - enemy.y);
     if (progress < distance * 0.25) {
@@ -456,7 +471,7 @@ export class Battle {
         enemy.targetId = target?.id ?? null;
         enemy.nextThinkAt = this.time + CFG.targetMs;
       }
-      if (!target) continue;
+      if (!target) { enemy.holding = false; continue; }
       this.moveEnemy(enemy, target, dt);
       const stats = ENEMY_STATS[enemy.kind];
       if (stats.heal) {

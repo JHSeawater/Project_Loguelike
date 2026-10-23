@@ -115,7 +115,8 @@ test('multi cast fans shots 10° apart and squeezes them into 60° once more sho
   const fan = (stacks) => {
     const battle = frozenBattle('warlock');
     for (let i = 0; i < stacks; i++) battle.applyReward('multiShot');
-    battle.enemies.push(tough(100, 'paladin', 1900, 1440));
+    // 성기사(60×80) 중심이 플레이어 중심과 같은 높이(y 1500)에 있어 대상 방향이 0°다.
+    battle.enemies.push(tough(100, 'paladin', 1900, 1460));
     step(battle, 20);
     return battle.projectiles.map(degrees).sort((a, b) => a - b);
   };
@@ -130,13 +131,13 @@ test('multi cast fans shots 10° apart and squeezes them into 60° once more sho
   // 부채꼴로 나간 투사체도 각각 비관통이며 같은 공격력을 가진다.
   const battle = frozenBattle('warlock');
   battle.applyReward('multiShot'); battle.applyReward('multiShot');
-  const enemy = tough(100, 'paladin', 1560, 1440);
+  const enemy = tough(100, 'paladin', 1560, 1460);
   battle.enemies.push(enemy);
   step(battle, 200);
   assert.equal(enemy.hp, 100000 - 30);
 });
 
-// 화면 밖 성기사(2500,2000, 80×120)의 왼쪽 판정 경계 x=2496에 y=2050으로 닿는 투사체. 폭발 중심은 (2496, 2050)이다.
+// 화면 밖 성기사(2500,2000, 60×80)의 왼쪽 판정 경계 x=2496에 y=2050으로 닿는 투사체. 폭발 중심은 (2496, 2050)이다.
 // 자동 공격의 영향을 받지 않도록 적을 화면 밖에 두고 투사체를 직접 넣는다.
 const shotAtPaladin = (battle) => {
   battle.projectiles.push({ id: 900, team: 'ally', x: 2396, y: 2046, width: 8, height: 8,

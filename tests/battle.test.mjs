@@ -100,8 +100,8 @@ test('swept projectiles hit the first enemy, pass obstacles, and still damage of
   battle.projectiles.push({ id: 700, team: 'ally', x: 2050, y: 1490, width: 8, height: 8,
     vx: 10000, vy: 0, damage: 10, color: 0xffffff, expiresAt: 5000 });
   battle.update(50, { x: 0, y: 0 }, () => ({ x: 0, y: 0, width: 1280, height: 720 }));
-  assert.equal(near.hp, 115);
-  assert.equal(far.hp, 125);
+  assert.equal(near.hp, 120);
+  assert.equal(far.hp, 130);
   assert.ok(!battle.projectiles.some((shot) => shot.id === 700));
 });
 
@@ -183,7 +183,7 @@ test('expired projectiles cannot deal damage and shots are cleaned at world boun
   battle.projectiles.push({ id: 700, team: 'ally', x: 2500, y: 2000, width: 8, height: 8,
     vx: 1, vy: 0, damage: 10, color: 0xffffff, expiresAt: 10 });
   tick(battle, 20);
-  assert.equal(enemy.hp, 125);
+  assert.equal(enemy.hp, 130);
   assert.ok(!battle.projectiles.some((shot) => shot.id === 700));
   assert.equal(segmentHit({ x: 0, y: 0 }, { x: 100, y: 100 }, { x: 50, y: 50, width: 10, height: 10 }), 0.5);
 });
@@ -204,13 +204,16 @@ test('shots hit within their remaining lifetime inside one frame, but not at or 
     return enemy.hp;
   };
   for (const frame of [5, 20, 50, 100]) {
-    assert.equal(hpAfter(8, frame), 115, `11.4ms hit, ${frame}ms frames`);
-    assert.equal(hpAfter(13, frame), 115, `18.6ms hit, ${frame}ms frames`);
+    assert.equal(hpAfter(8, frame), 120, `11.4ms hit, ${frame}ms frames`);
+    assert.equal(hpAfter(13, frame), 120, `18.6ms hit, ${frame}ms frames`);
     // 만료 시점에 정확히 닿으면 이미 소멸한 것으로 보아 피해가 없다.
-    assert.equal(hpAfter(14, frame), 125, `hit exactly at expiry, ${frame}ms frames`);
-    assert.equal(hpAfter(15, frame), 125, `21.4ms hit, ${frame}ms frames`);
+    assert.equal(hpAfter(14, frame), 130, `hit exactly at expiry, ${frame}ms frames`);
+    assert.equal(hpAfter(15, frame), 130, `21.4ms hit, ${frame}ms frames`);
   }
 });
+
+// 적끼리 막는 몸체: 위쪽 통과 영역(높이의 25%)을 뺀 아래쪽
+const footprint = (enemy) => ({ x: enemy.x, y: enemy.y + enemy.height / 4, width: enemy.width, height: enemy.height * 3 / 4 });
 
 test('live dungeon simulation keeps bodies out of obstacles and each other', () => {
   const battle = new Battle(dungeonObstacles, { random: seeded(726) });
@@ -218,21 +221,82 @@ test('live dungeon simulation keeps bodies out of obstacles and each other', () 
   for (let frame = 0; frame < 900; frame++) {
     battle.update(20, { x: 0, y: 0 }, viewAt);
     if (frame % 5 !== 0) continue;
-    const actors = [battle.player, ...battle.enemies];
-    for (let i = 0; i < actors.length; i++) {
-      assert.ok(contains(CFG.world, actors[i]));
-      assert.ok(dungeonObstacles.every((obstacle) => !overlaps(actors[i], obstacle)));
-      for (let j = i + 1; j < actors.length; j++) assert.ok(!overlaps(actors[i], actors[j]));
+    for (const actor of [battle.player, ...battle.enemies]) {
+      assert.ok(contains(CFG.world, actor));
+      assert.ok(dungeonObstacles.every((obstacle) => !overlaps(actor, obstacle)));
+    }
+    // 플레이어와 적은 몸체 전체로, 적끼리는 위쪽 통과 영역을 뺀 아래쪽으로 겹치지 않는다.
+    // 사거리 안에서 멈춘 원거리 적·사제는 다른 적이 지나갈 수 있으므로 적끼리 검사에서 뺀다.
+    for (let i = 0; i < battle.enemies.length; i++) {
+      assert.ok(!overlaps(battle.player, battle.enemies[i]));
+      for (let j = i + 1; j < battle.enemies.length; j++) {
+        if (battle.enemies[i].holding || battle.enemies[j].holding) continue;
+        assert.ok(!overlaps(footprint(battle.enemies[i]), footprint(battle.enemies[j])));
+      }
     }
   }
   assert.ok(battle.time >= 18000);
 });
 
+test('an enemy can step behind another enemy only as far as its 25% top pass area', () => {
+  // 앞 병사(1480,1440)는 플레이어 위에 붙어 멈춰 있고, 뒤 병사는 그 위에서 아래로 다가온다. 병사 높이 40의 25%는 10px이다.
+  const battle = new Battle([], { spawning: false });
+  battle.player.hp = battle.player.maxHp = 10000;
+  const front = createEnemy(100, 'soldier', 1480, 1440);
+  const back = createEnemy(101, 'soldier', 1480, 1400);
+  for (const enemy of [front, back]) enemy.hp = enemy.maxHp = 10000;
+  battle.enemies.push(front, back);
+  // 초당 110px이므로 20ms마다 2.2px씩 내려와 5번째 단계에 1410에서 멈춘다.
+  tick(battle, 100);
+  assert.deepEqual([front.x, front.y], [1480, 1440]);
+  assert.equal(back.y, 1410);
+  assert.equal(back.y + back.height - front.y, 10);
+  for (let frame = 0; frame < 100; frame++) {
+    tick(battle, 20);
+    assert.ok(!overlaps(footprint(back), footprint(front)));
+  }
+  // 앞 병사 쪽에서도 같다. 뒤 병사의 위쪽 10px까지만 겹칠 수 있고, 플레이어 몸체와는 겹치지 않는다.
+  assert.ok(!overlaps(back, battle.player) && !overlaps(front, battle.player));
+});
+
+test('enemies walk straight through a ranged enemy that has stopped within its range', () => {
+  // 궁사(30×40, 중심 1760,1500)는 플레이어 중심에서 260px로 사거리 280px 안이라 멈춰 있다.
+  // 같은 줄 뒤의 병사(1800,1480)는 옆으로 비키지 않고 궁사를 지나 2.5초 안에 플레이어에게 닿는다(남은 거리 280px, 초당 110px).
+  const battle = new Battle([], { spawning: false });
+  battle.player.hp = battle.player.maxHp = 10000;
+  const archer = createEnemy(100, 'archer', 1745, 1480);
+  const soldier = createEnemy(101, 'soldier', 1800, 1480);
+  for (const enemy of [archer, soldier]) enemy.hp = enemy.maxHp = 10000;
+  battle.enemies.push(archer, soldier);
+  let passed = false;
+  for (let t = 0; t < 2600; t += 20) {
+    tick(battle, 20);
+    assert.ok(archer.holding);
+    assert.deepEqual([archer.x, archer.y], [1745, 1480]);
+    assert.equal(soldier.y, 1480);
+    if (overlaps(soldier, archer)) passed = true;
+  }
+  assert.ok(passed);
+  assert.ok(edgeDistance(soldier, battle.player) <= 0.75);
+  assert.ok(!overlaps(soldier, battle.player));
+
+  // 아직 사거리 밖이라 움직이는 궁사는 평소처럼 막는다.
+  const moving = new Battle([], { spawning: false });
+  moving.player.attackable = false;
+  const far = createEnemy(100, 'archer', 2100, 1480);
+  const behind = createEnemy(101, 'soldier', 2135, 1480);
+  moving.enemies.push(far, behind);
+  moving.player.attackable = true;
+  tick(moving, 200);
+  assert.equal(far.holding, false);
+  assert.ok(!overlaps(footprint(behind), footprint(far)));
+});
+
 test('knight and paladin bodies use the decided rectangular sizes and melee range 1', () => {
   const knight = createEnemy(1, 'knight', 500, 500);
   const paladin = createEnemy(2, 'paladin', 500, 500);
-  assert.deepEqual([knight.width, knight.height], [120, 80]);
-  assert.deepEqual([paladin.width, paladin.height], [80, 120]);
+  assert.deepEqual([knight.width, knight.height], [80, 60]);
+  assert.deepEqual([paladin.width, paladin.height], [60, 80]);
   assert.equal(ENEMY_STATS.knight.range, 40);
   const battle = new Battle(dungeonObstacles, { random: seeded(29) });
   const view = viewAt(battle.player);
@@ -566,9 +630,12 @@ test('attack, heal and spawn intervals do not stretch at frame sizes that do not
   // 플레이어를 벽으로 둘러싸 근접 적이 닿지 못하게 한다. 투사체와 회복은 장애물에 막히지 않는다.
   const walls = [{ x: 1460, y: 1460, width: 80, height: 10 }, { x: 1460, y: 1530, width: 80, height: 10 },
     { x: 1460, y: 1460, width: 10, height: 80 }, { x: 1530, y: 1460, width: 10, height: 80 }];
+  // 성기사(1760,1440, 60×80)도 벽으로 둘러 회복 반경 안에 묶어 둔다. 멈춘 사제는 막지 않으므로 벽이 없으면 걸어 나간다.
+  const pen = [{ x: 1750, y: 1430, width: 10, height: 100 }, { x: 1820, y: 1430, width: 10, height: 100 },
+    { x: 1750, y: 1430, width: 80, height: 10 }, { x: 1750, y: 1520, width: 80, height: 10 }];
   for (const frame of frames) {
     const label = `${frame.toFixed(1)}ms`;
-    const battle = new Battle(walls, { spawning: false });
+    const battle = new Battle([...walls, ...pen], { spawning: false });
     const archer = createEnemy(100, 'archer', 1480, 1700);
     const priest = createEnemy(101, 'priest', 1700, 1480);
     // 사제 회복 반경에 닿아 있고, 회복해도 최대 체력에 닿지 않는 성기사

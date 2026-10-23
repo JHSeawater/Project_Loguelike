@@ -110,7 +110,7 @@ test('zealot groups of five appear every 30s from 2:00 around one off-screen poi
   assert.equal(zealots.length, 5);
   const leader = center(zealots[0]);
   for (const zealot of zealots) {
-    assert.deepEqual([zealot.width, zealot.height], [30, 30]);
+    assert.deepEqual([zealot.width, zealot.height], [25, 30]);
     legalSpawn(battle, zealot);
     // 무리는 첫 광신도 중심에서 ±90px 범위 안에 놓인다.
     assert.ok(Math.abs(center(zealot).x - leader.x) <= 90 && Math.abs(center(zealot).y - leader.y) <= 90);

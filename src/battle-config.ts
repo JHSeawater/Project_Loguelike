@@ -8,6 +8,8 @@ export const BATTLE_CONFIG = {
   playerShot: { speed: 700, size: 8, lifeMs: 4000, color: 0xf5e6a8 },
   enemyShot: { speed: 280, size: 10, lifeMs: 6000 },
   expOrb: { size: 12, pullSpeed: 450, max: 300 },
+  // 적끼리는 몸체 위쪽 이 비율만큼 겹칠 수 있다. 장애물의 위쪽 통과 영역처럼 다른 적 뒤로 살짝 들어간다.
+  enemyPassTop: 0.25,
   spawnMargin: 96,
   targetMs: 250,
   pathMs: 750,
@@ -38,15 +40,15 @@ export interface EnemyStats {
 
 // 크기·사거리 1은 40px, 원거리 공격 간격은 초 단위다. 기사는 가로형, 성기사는 세로형 몸체를 쓴다.
 export const ENEMY_STATS: Record<EnemyKind, EnemyStats> = {
-  soldier: { name: '병사', width: 40, height: 40, hp: 25, damage: 10, speed: 100, range: 40, attackMs: 0, ranged: false, color: 0xdb6464, exp: 1 },
-  knight: { name: '기사', width: 120, height: 80, hp: 75, damage: 20, speed: 140, range: 40, attackMs: 0, ranged: false, color: 0x819ce0, exp: 3 },
-  paladin: { name: '성기사', width: 80, height: 120, hp: 125, damage: 25, speed: 65, range: 40, attackMs: 0, ranged: false, color: 0xdfbe5d, exp: 4 },
-  archer: { name: '궁사', width: 40, height: 40, hp: 10, damage: 5, speed: 110, range: 280, attackMs: 5000, ranged: true, color: 0xa7c26b, exp: 1 },
-  mage: { name: '마법사', width: 40, height: 40, hp: 15, damage: 10, speed: 90, range: 200, attackMs: 10000, ranged: true, color: 0xbc83d6, exp: 2 },
-  zealot: { name: '광신도', width: 30, height: 30, hp: 12, damage: 6, speed: 160, range: 40, attackMs: 0, ranged: false, color: 0xe08a3c, exp: 0.5 },
-  crossbowman: { name: '석궁병', width: 40, height: 40, hp: 20, damage: 15, speed: 130, range: 320, attackMs: 6000, ranged: true, color: 0x4fb8b0, exp: 2,
+  soldier: { name: '병사', width: 40, height: 40, hp: 25, damage: 10, speed: 110, range: 40, attackMs: 0, ranged: false, color: 0xdb6464, exp: 1 },
+  knight: { name: '기사', width: 80, height: 60, hp: 75, damage: 20, speed: 160, range: 40, attackMs: 0, ranged: false, color: 0x819ce0, exp: 3 },
+  paladin: { name: '성기사', width: 60, height: 80, hp: 130, damage: 25, speed: 75, range: 40, attackMs: 0, ranged: false, color: 0xdfbe5d, exp: 4 },
+  archer: { name: '궁사', width: 30, height: 40, hp: 15, damage: 5, speed: 120, range: 280, attackMs: 5000, ranged: true, color: 0xa7c26b, exp: 1 },
+  mage: { name: '마법사', width: 40, height: 40, hp: 20, damage: 10, speed: 100, range: 200, attackMs: 10000, ranged: true, color: 0xbc83d6, exp: 2 },
+  zealot: { name: '광신도', width: 25, height: 30, hp: 12, damage: 6, speed: 250, range: 40, attackMs: 0, ranged: false, color: 0xe08a3c, exp: 0.5 },
+  crossbowman: { name: '석궁병', width: 40, height: 40, hp: 20, damage: 15, speed: 120, range: 320, attackMs: 6000, ranged: true, color: 0x4fb8b0, exp: 2,
     shotSpeed: 500 },
-  priest: { name: '사제', width: 40, height: 40, hp: 30, damage: 0, speed: 85, range: 240, attackMs: 3000, ranged: true, color: 0xe58fb8, exp: 2.5,
+  priest: { name: '사제', width: 30, height: 40, hp: 25, damage: 0, speed: 100, range: 240, attackMs: 3000, ranged: true, color: 0xe58fb8, exp: 2.5,
     heal: { radius: 160, amount: 10 } },
 };
 
