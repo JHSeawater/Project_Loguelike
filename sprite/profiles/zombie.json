@@ -1,0 +1,53 @@
+{
+  "id": "zombie",
+  "code_id": "zombie",
+  "folder": "summons",
+  "frame_size": [
+    64,
+    64
+  ],
+  "anchor": [
+    32,
+    60
+  ],
+  "body_size": [
+    30,
+    30
+  ],
+  "target_height": 36,
+  "source_rows": [
+    "down",
+    "left",
+    "right",
+    "up"
+  ],
+  "magic": "none",
+  "core_alpha": 240,
+  "body_alpha": 128,
+  "min_component_area": 3000,
+  "keep_parts": true,
+  "part_area": 30,
+  "animations": [
+    {
+      "name": "idle",
+      "source": "sprite/used/zombie_01.png",
+      "columns": 4,
+      "fps": 6,
+      "effect_required": false
+    },
+    {
+      "name": "walk",
+      "source": "sprite/used/zombie_02.png",
+      "columns": 6,
+      "fps": 10,
+      "effect_required": false
+    },
+    {
+      "name": "attack",
+      "source": "sprite/used/zombie_03.png",
+      "columns": 6,
+      "fps": 12,
+      "effect_required": false
+    }
+  ]
+}

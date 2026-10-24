@@ -1,0 +1,1085 @@
+{
+    "asset":  "zombie",
+    "input_hash":  "46c590b09d106dcc2188b01577bcf8d22b9964572338ff466db278583e605e5f",
+    "outputs":  {
+                    "zombie_idle.png":  "24469909a36b95e91c5dab483dbf8fda3c06dec2089f3565a121920adc6290b7",
+                    "zombie_walk.png":  "106cd8d312434b9dd589d6d01887b78f91b35294bed94f59e031c9bfbd8d15d6",
+                    "zombie_attack.png":  "a09855d2e1984a67c7b635e53c423bb31994e59308c8db0af3ad671edf6d60f3"
+                },
+    "sheets":  [
+                   {
+                       "animation":  "idle",
+                       "source":  "sprite/used/zombie_01.png",
+                       "source_sha256":  "2fc1f65d65e5a4e14df48d53783b8a22b2217189bfc22c6de78a59206a7570ed",
+                       "body":  "zombie_idle.png",
+                       "magic":  null,
+                       "frame_size_px":  [
+                                             64,
+                                             64
+                                         ],
+                       "sheet_size_px":  [
+                                             256,
+                                             256
+                                         ],
+                       "frames_per_direction":  4,
+                       "frame_count":  16,
+                       "fps":  6,
+                       "directions":  [
+                                          "down",
+                                          "left",
+                                          "right",
+                                          "up"
+                                      ],
+                       "anchor_px":  [
+                                         32,
+                                         60
+                                     ],
+                       "body_rect_px":  [
+                                            17,
+                                            30,
+                                            30,
+                                            30
+                                        ],
+                       "margin_px":  0,
+                       "spacing_px":  0,
+                       "extraction":  [
+                                          {
+                                              "SourceRect":  [
+                                                                 0,
+                                                                 0,
+                                                                 323,
+                                                                 328
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 170,
+                                                                 297
+                                                             ],
+                                              "Scale":  0.15417558886509636,
+                                              "DirectionRow":  0,
+                                              "Column":  0
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 323,
+                                                                 0,
+                                                                 310,
+                                                                 328
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 477.5,
+                                                                 297
+                                                             ],
+                                              "Scale":  0.15417558886509636,
+                                              "DirectionRow":  0,
+                                              "Column":  1
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 633,
+                                                                 0,
+                                                                 317,
+                                                                 328
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 793,
+                                                                 297
+                                                             ],
+                                              "Scale":  0.15417558886509636,
+                                              "DirectionRow":  0,
+                                              "Column":  2
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 950,
+                                                                 0,
+                                                                 304,
+                                                                 328
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 1113,
+                                                                 297
+                                                             ],
+                                              "Scale":  0.15417558886509636,
+                                              "DirectionRow":  0,
+                                              "Column":  3
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 0,
+                                                                 328,
+                                                                 317,
+                                                                 303
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 187,
+                                                                 600
+                                                             ],
+                                              "Scale":  0.14516129032258066,
+                                              "DirectionRow":  1,
+                                              "Column":  0
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 317,
+                                                                 328,
+                                                                 314,
+                                                                 303
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 492.5,
+                                                                 600
+                                                             ],
+                                              "Scale":  0.14516129032258066,
+                                              "DirectionRow":  1,
+                                              "Column":  1
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 631,
+                                                                 328,
+                                                                 314,
+                                                                 303
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 806,
+                                                                 600
+                                                             ],
+                                              "Scale":  0.14516129032258066,
+                                              "DirectionRow":  1,
+                                              "Column":  2
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 945,
+                                                                 328,
+                                                                 309,
+                                                                 303
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 1123.5,
+                                                                 600
+                                                             ],
+                                              "Scale":  0.14516129032258066,
+                                              "DirectionRow":  1,
+                                              "Column":  3
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 0,
+                                                                 631,
+                                                                 321,
+                                                                 310
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 142,
+                                                                 912
+                                                             ],
+                                              "Scale":  0.14285714285714285,
+                                              "DirectionRow":  2,
+                                              "Column":  0
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 321,
+                                                                 631,
+                                                                 311,
+                                                                 310
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 452.5,
+                                                                 912
+                                                             ],
+                                              "Scale":  0.14285714285714285,
+                                              "DirectionRow":  2,
+                                              "Column":  1
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 632,
+                                                                 631,
+                                                                 313,
+                                                                 310
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 770.5,
+                                                                 914
+                                                             ],
+                                              "Scale":  0.14285714285714285,
+                                              "DirectionRow":  2,
+                                              "Column":  2
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 945,
+                                                                 631,
+                                                                 309,
+                                                                 310
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 1080,
+                                                                 915
+                                                             ],
+                                              "Scale":  0.14285714285714285,
+                                              "DirectionRow":  2,
+                                              "Column":  3
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 0,
+                                                                 941,
+                                                                 318,
+                                                                 313
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 139.5,
+                                                                 1217
+                                                             ],
+                                              "Scale":  0.14937759336099585,
+                                              "DirectionRow":  3,
+                                              "Column":  0
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 318,
+                                                                 941,
+                                                                 318,
+                                                                 313
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 478.5,
+                                                                 1213
+                                                             ],
+                                              "Scale":  0.14937759336099585,
+                                              "DirectionRow":  3,
+                                              "Column":  1
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 636,
+                                                                 941,
+                                                                 311,
+                                                                 313
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 793,
+                                                                 1215
+                                                             ],
+                                              "Scale":  0.14937759336099585,
+                                              "DirectionRow":  3,
+                                              "Column":  2
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 947,
+                                                                 941,
+                                                                 307,
+                                                                 313
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 1079,
+                                                                 1217
+                                                             ],
+                                              "Scale":  0.14937759336099585,
+                                              "DirectionRow":  3,
+                                              "Column":  3
+                                          }
+                                      ]
+                   },
+                   {
+                       "animation":  "walk",
+                       "source":  "sprite/used/zombie_02.png",
+                       "source_sha256":  "16c72c7799baa3d9e4e5a06b86dc83169d283d9929245aa0a66634bcef5ade65",
+                       "body":  "zombie_walk.png",
+                       "magic":  null,
+                       "frame_size_px":  [
+                                             64,
+                                             64
+                                         ],
+                       "sheet_size_px":  [
+                                             384,
+                                             256
+                                         ],
+                       "frames_per_direction":  6,
+                       "frame_count":  24,
+                       "fps":  10,
+                       "directions":  [
+                                          "down",
+                                          "left",
+                                          "right",
+                                          "up"
+                                      ],
+                       "anchor_px":  [
+                                         32,
+                                         60
+                                     ],
+                       "body_rect_px":  [
+                                            17,
+                                            30,
+                                            30,
+                                            30
+                                        ],
+                       "margin_px":  0,
+                       "spacing_px":  0,
+                       "extraction":  [
+                                          {
+                                              "SourceRect":  [
+                                                                 0,
+                                                                 0,
+                                                                 260,
+                                                                 257
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 139.5,
+                                                                 238
+                                                             ],
+                                              "Scale":  0.16513761467889909,
+                                              "DirectionRow":  0,
+                                              "Column":  0
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 260,
+                                                                 0,
+                                                                 251,
+                                                                 257
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 409,
+                                                                 244
+                                                             ],
+                                              "Scale":  0.16513761467889909,
+                                              "DirectionRow":  0,
+                                              "Column":  1
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 511,
+                                                                 0,
+                                                                 261,
+                                                                 257
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 622,
+                                                                 244
+                                                             ],
+                                              "Scale":  0.16513761467889909,
+                                              "DirectionRow":  0,
+                                              "Column":  2
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 772,
+                                                                 0,
+                                                                 260,
+                                                                 257
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 905,
+                                                                 245
+                                                             ],
+                                              "Scale":  0.16513761467889909,
+                                              "DirectionRow":  0,
+                                              "Column":  3
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 1032,
+                                                                 0,
+                                                                 255,
+                                                                 257
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 1156.5,
+                                                                 239
+                                                             ],
+                                              "Scale":  0.16513761467889909,
+                                              "DirectionRow":  0,
+                                              "Column":  4
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 1287,
+                                                                 0,
+                                                                 249,
+                                                                 257
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 1416,
+                                                                 244
+                                                             ],
+                                              "Scale":  0.16513761467889909,
+                                              "DirectionRow":  0,
+                                              "Column":  5
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 0,
+                                                                 257,
+                                                                 263,
+                                                                 249
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 154.5,
+                                                                 493
+                                                             ],
+                                              "Scale":  0.15929203539823009,
+                                              "DirectionRow":  1,
+                                              "Column":  0
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 263,
+                                                                 257,
+                                                                 257,
+                                                                 249
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 405,
+                                                                 493
+                                                             ],
+                                              "Scale":  0.15929203539823009,
+                                              "DirectionRow":  1,
+                                              "Column":  1
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 520,
+                                                                 257,
+                                                                 256,
+                                                                 249
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 654.5,
+                                                                 495
+                                                             ],
+                                              "Scale":  0.15929203539823009,
+                                              "DirectionRow":  1,
+                                              "Column":  2
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 776,
+                                                                 257,
+                                                                 255,
+                                                                 249
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 921,
+                                                                 492
+                                                             ],
+                                              "Scale":  0.15929203539823009,
+                                              "DirectionRow":  1,
+                                              "Column":  3
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 1031,
+                                                                 257,
+                                                                 255,
+                                                                 249
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 1171.5,
+                                                                 495
+                                                             ],
+                                              "Scale":  0.15929203539823009,
+                                              "DirectionRow":  1,
+                                              "Column":  4
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 1286,
+                                                                 257,
+                                                                 250,
+                                                                 249
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 1437.5,
+                                                                 493
+                                                             ],
+                                              "Scale":  0.15929203539823009,
+                                              "DirectionRow":  1,
+                                              "Column":  5
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 0,
+                                                                 506,
+                                                                 260,
+                                                                 250
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 108.5,
+                                                                 746
+                                                             ],
+                                              "Scale":  0.1561822125813449,
+                                              "DirectionRow":  2,
+                                              "Column":  0
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 260,
+                                                                 506,
+                                                                 254,
+                                                                 250
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 371.5,
+                                                                 750
+                                                             ],
+                                              "Scale":  0.1561822125813449,
+                                              "DirectionRow":  2,
+                                              "Column":  1
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 514,
+                                                                 506,
+                                                                 254,
+                                                                 250
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 620.5,
+                                                                 746
+                                                             ],
+                                              "Scale":  0.1561822125813449,
+                                              "DirectionRow":  2,
+                                              "Column":  2
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 768,
+                                                                 506,
+                                                                 255,
+                                                                 250
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 882.5,
+                                                                 749
+                                                             ],
+                                              "Scale":  0.1561822125813449,
+                                              "DirectionRow":  2,
+                                              "Column":  3
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 1023,
+                                                                 506,
+                                                                 257,
+                                                                 250
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 1132.5,
+                                                                 749
+                                                             ],
+                                              "Scale":  0.1561822125813449,
+                                              "DirectionRow":  2,
+                                              "Column":  4
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 1280,
+                                                                 506,
+                                                                 256,
+                                                                 250
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 1392.5,
+                                                                 746
+                                                             ],
+                                              "Scale":  0.1561822125813449,
+                                              "DirectionRow":  2,
+                                              "Column":  5
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 0,
+                                                                 756,
+                                                                 257,
+                                                                 268
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 134,
+                                                                 992
+                                                             ],
+                                              "Scale":  0.16071428571428573,
+                                              "DirectionRow":  3,
+                                              "Column":  0
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 257,
+                                                                 756,
+                                                                 261,
+                                                                 268
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 390.5,
+                                                                 997
+                                                             ],
+                                              "Scale":  0.16071428571428573,
+                                              "DirectionRow":  3,
+                                              "Column":  1
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 518,
+                                                                 756,
+                                                                 255,
+                                                                 268
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 623.5,
+                                                                 990
+                                                             ],
+                                              "Scale":  0.16071428571428573,
+                                              "DirectionRow":  3,
+                                              "Column":  2
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 773,
+                                                                 756,
+                                                                 257,
+                                                                 268
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 877,
+                                                                 990
+                                                             ],
+                                              "Scale":  0.16071428571428573,
+                                              "DirectionRow":  3,
+                                              "Column":  3
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 1030,
+                                                                 756,
+                                                                 256,
+                                                                 268
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 1158,
+                                                                 992
+                                                             ],
+                                              "Scale":  0.16071428571428573,
+                                              "DirectionRow":  3,
+                                              "Column":  4
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 1286,
+                                                                 756,
+                                                                 250,
+                                                                 268
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 1407.5,
+                                                                 997
+                                                             ],
+                                              "Scale":  0.16071428571428573,
+                                              "DirectionRow":  3,
+                                              "Column":  5
+                                          }
+                                      ]
+                   },
+                   {
+                       "animation":  "attack",
+                       "source":  "sprite/used/zombie_03.png",
+                       "source_sha256":  "91bf67c63f2b027fa3694cb1f74edb35fd838fbbbe6e428df723a00333c2189b",
+                       "body":  "zombie_attack.png",
+                       "magic":  null,
+                       "frame_size_px":  [
+                                             64,
+                                             64
+                                         ],
+                       "sheet_size_px":  [
+                                             384,
+                                             256
+                                         ],
+                       "frames_per_direction":  6,
+                       "frame_count":  24,
+                       "fps":  12,
+                       "directions":  [
+                                          "down",
+                                          "left",
+                                          "right",
+                                          "up"
+                                      ],
+                       "anchor_px":  [
+                                         32,
+                                         60
+                                     ],
+                       "body_rect_px":  [
+                                            17,
+                                            30,
+                                            30,
+                                            30
+                                        ],
+                       "margin_px":  0,
+                       "spacing_px":  0,
+                       "extraction":  [
+                                          {
+                                              "SourceRect":  [
+                                                                 0,
+                                                                 0,
+                                                                 274,
+                                                                 266
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 142.5,
+                                                                 247
+                                                             ],
+                                              "Scale":  0.17183770883054891,
+                                              "DirectionRow":  0,
+                                              "Column":  0
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 274,
+                                                                 0,
+                                                                 263,
+                                                                 266
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 383.5,
+                                                                 242
+                                                             ],
+                                              "Scale":  0.17183770883054891,
+                                              "DirectionRow":  0,
+                                              "Column":  1
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 537,
+                                                                 0,
+                                                                 255,
+                                                                 266
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 643.5,
+                                                                 247
+                                                             ],
+                                              "Scale":  0.17183770883054891,
+                                              "DirectionRow":  0,
+                                              "Column":  2
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 792,
+                                                                 0,
+                                                                 250,
+                                                                 266
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 916,
+                                                                 247
+                                                             ],
+                                              "Scale":  0.17183770883054891,
+                                              "DirectionRow":  0,
+                                              "Column":  3
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 1042,
+                                                                 0,
+                                                                 247,
+                                                                 266
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 1173,
+                                                                 247
+                                                             ],
+                                              "Scale":  0.17183770883054891,
+                                              "DirectionRow":  0,
+                                              "Column":  4
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 1289,
+                                                                 0,
+                                                                 247,
+                                                                 266
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 1413,
+                                                                 247
+                                                             ],
+                                              "Scale":  0.17183770883054891,
+                                              "DirectionRow":  0,
+                                              "Column":  5
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 0,
+                                                                 266,
+                                                                 264,
+                                                                 248
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 162.5,
+                                                                 499
+                                                             ],
+                                              "Scale":  0.16705336426914152,
+                                              "DirectionRow":  1,
+                                              "Column":  0
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 264,
+                                                                 266,
+                                                                 244,
+                                                                 248
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 427,
+                                                                 497
+                                                             ],
+                                              "Scale":  0.16705336426914152,
+                                              "DirectionRow":  1,
+                                              "Column":  1
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 508,
+                                                                 266,
+                                                                 259,
+                                                                 248
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 630.5,
+                                                                 498
+                                                             ],
+                                              "Scale":  0.16705336426914152,
+                                              "DirectionRow":  1,
+                                              "Column":  2
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 767,
+                                                                 266,
+                                                                 275,
+                                                                 248
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 863.5,
+                                                                 497
+                                                             ],
+                                              "Scale":  0.16705336426914152,
+                                              "DirectionRow":  1,
+                                              "Column":  3
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 1042,
+                                                                 266,
+                                                                 250,
+                                                                 248
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 1197.5,
+                                                                 499
+                                                             ],
+                                              "Scale":  0.16705336426914152,
+                                              "DirectionRow":  1,
+                                              "Column":  4
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 1292,
+                                                                 266,
+                                                                 244,
+                                                                 248
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 1435,
+                                                                 499
+                                                             ],
+                                              "Scale":  0.16705336426914152,
+                                              "DirectionRow":  1,
+                                              "Column":  5
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 0,
+                                                                 514,
+                                                                 257,
+                                                                 242
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 110,
+                                                                 745
+                                                             ],
+                                              "Scale":  0.16475972540045766,
+                                              "DirectionRow":  2,
+                                              "Column":  0
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 257,
+                                                                 514,
+                                                                 261,
+                                                                 242
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 354,
+                                                                 745
+                                                             ],
+                                              "Scale":  0.16475972540045766,
+                                              "DirectionRow":  2,
+                                              "Column":  1
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 518,
+                                                                 514,
+                                                                 272,
+                                                                 242
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 657,
+                                                                 745
+                                                             ],
+                                              "Scale":  0.16475972540045766,
+                                              "DirectionRow":  2,
+                                              "Column":  2
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 790,
+                                                                 514,
+                                                                 258,
+                                                                 242
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 883.5,
+                                                                 745
+                                                             ],
+                                              "Scale":  0.16475972540045766,
+                                              "DirectionRow":  2,
+                                              "Column":  3
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 1048,
+                                                                 514,
+                                                                 243,
+                                                                 242
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 1149,
+                                                                 745
+                                                             ],
+                                              "Scale":  0.16475972540045766,
+                                              "DirectionRow":  2,
+                                              "Column":  4
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 1291,
+                                                                 514,
+                                                                 245,
+                                                                 242
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 1391,
+                                                                 745
+                                                             ],
+                                              "Scale":  0.16475972540045766,
+                                              "DirectionRow":  2,
+                                              "Column":  5
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 0,
+                                                                 756,
+                                                                 267,
+                                                                 268
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 115,
+                                                                 987
+                                                             ],
+                                              "Scale":  0.16179775280898875,
+                                              "DirectionRow":  3,
+                                              "Column":  0
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 267,
+                                                                 756,
+                                                                 265,
+                                                                 268
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 409,
+                                                                 987
+                                                             ],
+                                              "Scale":  0.16179775280898875,
+                                              "DirectionRow":  3,
+                                              "Column":  1
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 532,
+                                                                 756,
+                                                                 256,
+                                                                 268
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 673.5,
+                                                                 988
+                                                             ],
+                                              "Scale":  0.16179775280898875,
+                                              "DirectionRow":  3,
+                                              "Column":  2
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 788,
+                                                                 756,
+                                                                 255,
+                                                                 268
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 906,
+                                                                 988
+                                                             ],
+                                              "Scale":  0.16179775280898875,
+                                              "DirectionRow":  3,
+                                              "Column":  3
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 1043,
+                                                                 756,
+                                                                 248,
+                                                                 268
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 1162,
+                                                                 988
+                                                             ],
+                                              "Scale":  0.16179775280898875,
+                                              "DirectionRow":  3,
+                                              "Column":  4
+                                          },
+                                          {
+                                              "SourceRect":  [
+                                                                 1291,
+                                                                 756,
+                                                                 245,
+                                                                 268
+                                                             ],
+                                              "SourceFoot":  [
+                                                                 1389.5,
+                                                                 988
+                                                             ],
+                                              "Scale":  0.16179775280898875,
+                                              "DirectionRow":  3,
+                                              "Column":  5
+                                          }
+                                      ]
+                   }
+               ]
+}

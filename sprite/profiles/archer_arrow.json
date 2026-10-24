@@ -1,0 +1,19 @@
+{
+  "id": "archer_arrow",
+  "layout": "strip",
+  "folder": "projectiles",
+  "source": "sprite/archer_arrow.png",
+  "frames": 1,
+  "fps": 1,
+  "frame_size": [
+    24,
+    12
+  ],
+  "pivot": [
+    12,
+    6
+  ],
+  "target_width": 22,
+  "align": "center",
+  "alpha": "binary"
+}

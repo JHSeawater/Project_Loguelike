@@ -1,0 +1,19 @@
+{
+  "id": "crossbow_bolt",
+  "layout": "strip",
+  "folder": "projectiles",
+  "source": "sprite/crossbow_bolt.png",
+  "frames": 1,
+  "fps": 1,
+  "frame_size": [
+    24,
+    12
+  ],
+  "pivot": [
+    12,
+    6
+  ],
+  "target_width": 20,
+  "align": "center",
+  "alpha": "binary"
+}

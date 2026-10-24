@@ -1,0 +1,53 @@
+{
+  "id": "warlock",
+  "code_id": "warlock",
+  "folder": "characters",
+  "frame_size": [
+    64,
+    64
+  ],
+  "anchor": [
+    32,
+    60
+  ],
+  "body_size": [
+    40,
+    40
+  ],
+  "target_height": 52,
+  "source_rows": [
+    "down",
+    "right",
+    "left",
+    "up"
+  ],
+  "magic": "green",
+  "core_alpha": 240,
+  "body_alpha": 128,
+  "min_component_area": 3000,
+  "keep_parts": false,
+  "part_area": 30,
+  "animations": [
+    {
+      "name": "idle",
+      "source": "sprite/used/Warlock_01.png",
+      "columns": 4,
+      "fps": 6,
+      "effect_required": true
+    },
+    {
+      "name": "walk",
+      "source": "sprite/used/Warlock_03.png",
+      "columns": 6,
+      "fps": 10,
+      "effect_required": true
+    },
+    {
+      "name": "cast",
+      "source": "sprite/used/Warlock_02.png",
+      "columns": 6,
+      "fps": 12,
+      "effect_required": true
+    }
+  ]
+}

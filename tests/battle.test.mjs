@@ -122,7 +122,7 @@ test('player damage has a 0.3s shared cooldown, enemies have no damage cooldown'
 
 test('melee enemies hit once on contact and then every attack interval, regardless of frame size', () => {
   assert.deepEqual(['soldier', 'knight', 'paladin', 'zealot', 'commander'].map((kind) => ENEMY_STATS[kind].attackMs),
-    [800, 1000, 1200, 500, 1500]);
+    [800, 1800, 2200, 500, 1500]);
   // 플레이어(1480~1520) 오른쪽 0.5px 옆에 붙은 적. 체력을 크게 두어 자동 공격으로 죽지 않게 한다.
   const hitsIn = (kind, frame) => {
     const battle = new Battle([], { spawning: false });
@@ -130,11 +130,12 @@ test('melee enemies hit once on contact and then every attack interval, regardle
     const enemy = createEnemy(100, kind, 1520.5, 1480);
     enemy.hp = enemy.maxHp = 100000;
     battle.enemies.push(enemy);
-    for (let t = 0; t < 2000; t += frame) battle.update(Math.min(frame, 2000 - t), { x: 0, y: 0 }, stillView);
+    for (let t = 0; t < 2500; t += frame) battle.update(Math.min(frame, 2500 - t), { x: 0, y: 0 }, stillView);
     return (100000 - battle.player.hp) / ENEMY_STATS[kind].damage;
   };
-  // 첫 단계에 닿자마자 한 번, 이후 간격마다: 2초 동안 병사 3번(0·0.8·1.6초), 기사 2번, 성기사 2번, 광신도 4번, 성기사단장 2번.
-  const expected = { soldier: 3, knight: 2, paladin: 2, zealot: 4, commander: 2 };
+  // 첫 단계에 닿자마자 한 번, 이후 간격마다: 2.5초 동안 병사 4번(0·0.8·1.6·2.4초), 기사 2번(0·1.8초),
+  // 성기사 2번(0·2.2초), 광신도 5번, 성기사단장 2번.
+  const expected = { soldier: 4, knight: 2, paladin: 2, zealot: 5, commander: 2 };
   for (const frame of [20, 45, 50]) {
     for (const [kind, hits] of Object.entries(expected)) assert.equal(hitsIn(kind, frame), hits, `${kind} ${frame}ms`);
   }

@@ -1,6 +1,8 @@
 import Phaser from 'phaser';
 import { CHARACTER_STATS, SKILL_CONFIG, type CharacterId } from './battle-config';
 import { REWARDS, SKILL_IDS } from './rewards';
+import { SPRITE_ART } from './sprite-animation';
+import { loadSprite, createSpriteView } from './sprite-view';
 
 export const GAME_TITLE = 'Grave of the Fallen';
 export const FONT = 'Malgun Gothic, sans-serif';
@@ -63,6 +65,10 @@ export class CharacterSelectScene extends Phaser.Scene {
     super('CharacterSelectScene');
   }
 
+  preload(): void {
+    for (const id of PLAYABLE) loadSprite(this, SPRITE_ART[id], true);
+  }
+
   create(): void {
     const openedAt = this.time.now;
     this.selected = 0;
@@ -81,7 +87,7 @@ export class CharacterSelectScene extends Phaser.Scene {
         .on('pointerdown', () => { if (accepts(this, openedAt)) this.begin(index); });
       this.cards.push(view);
       this.add.text(left, card.top + 20, `[${index + 1}]`, { fontFamily: FONT, fontSize: '18px', color: '#9fd0ff' });
-      this.add.rectangle(left + 20, card.top + 72, 40, 40, stats.color);
+      createSpriteView(this, SPRITE_ART[id], left + 20, card.top + 100);
       this.add.text(left + 56, card.top + 58, stats.name, { fontFamily: FONT, fontSize: '26px', color: '#eeeece' });
       this.add.text(left, card.top + 112, describe(id).join('\n'), {
         fontFamily: FONT, fontSize: '16px', color: '#c8d2c0', lineSpacing: 8,

@@ -1,0 +1,51 @@
+{
+    "asset":  "archer_arrow",
+    "input_hash":  "4a5538ac9cddf734b533da30cd837818e85a8cc7d7ab1d2873600f0bb3a97d3f",
+    "outputs":  {
+                    "archer_arrow.png":  "414f75bfd015ed94cb2e9b82dfec52ea106d10c2b3d03230e045b2cd23dd782c"
+                },
+    "sheets":  [
+                   {
+                       "animation":  "strip",
+                       "source":  "sprite/archer_arrow.png",
+                       "source_sha256":  "36132664109839a8e793324ea430015ce32645fa431f81a8bd07a5b2095839cc",
+                       "sheets":  [
+                                      "archer_arrow.png"
+                                  ],
+                       "frame_size_px":  [
+                                             24,
+                                             12
+                                         ],
+                       "sheet_size_px":  [
+                                             24,
+                                             12
+                                         ],
+                       "frame_count":  1,
+                       "fps":  1,
+                       "pivot_px":  [
+                                        12,
+                                        6
+                                    ],
+                       "extraction":  [
+                                          {
+                                              "Column":  0,
+                                              "SourceRect":  [
+                                                                 725,
+                                                                 412,
+                                                                 342,
+                                                                 96
+                                                             ],
+                                              "NativeSize":  [
+                                                                 21,
+                                                                 6
+                                                             ],
+                                              "Offset":  [
+                                                             2,
+                                                             3
+                                                         ],
+                                              "Scale":  0.064327485380116955
+                                          }
+                                      ]
+                   }
+               ]
+}

@@ -1,0 +1,141 @@
+{
+    "asset":  "boss_aegis",
+    "input_hash":  "90b6d309962f923df81f27489aa33ceefe3cc3eddf356d4e5bdfec77aafcbb39",
+    "outputs":  {
+                    "boss_aegis.png":  "3958a8b15e3eee4d66c33676ae162d20272794c2bda9c5a4439a85bcbc2eb631"
+                },
+    "sheets":  [
+                   {
+                       "animation":  "strip",
+                       "source":  "sprite/boss_aegis.png",
+                       "source_sha256":  "f437ba6cb58b4dcb5e478fb1f281d2b1c127df99aa19380418635f646056c5e8",
+                       "sheets":  [
+                                      "boss_aegis.png"
+                                  ],
+                       "frame_size_px":  [
+                                             200,
+                                             224
+                                         ],
+                       "sheet_size_px":  [
+                                             1200,
+                                             224
+                                         ],
+                       "frame_count":  6,
+                       "fps":  12,
+                       "pivot_px":  [
+                                        100,
+                                        112
+                                    ],
+                       "extraction":  [
+                                          {
+                                              "Column":  0,
+                                              "SourceRect":  [
+                                                                 13,
+                                                                 153,
+                                                                 346,
+                                                                 393
+                                                             ],
+                                              "NativeSize":  [
+                                                                 192,
+                                                                 219
+                                                             ],
+                                              "Offset":  [
+                                                             4,
+                                                             2
+                                                         ],
+                                              "Scale":  0.55491329479768792
+                                          },
+                                          {
+                                              "Column":  1,
+                                              "SourceRect":  [
+                                                                 374,
+                                                                 153,
+                                                                 345,
+                                                                 393
+                                                             ],
+                                              "NativeSize":  [
+                                                                 192,
+                                                                 217
+                                                             ],
+                                              "Offset":  [
+                                                             4,
+                                                             2
+                                                         ],
+                                              "Scale":  0.55491329479768792
+                                          },
+                                          {
+                                              "Column":  2,
+                                              "SourceRect":  [
+                                                                 735,
+                                                                 153,
+                                                                 341,
+                                                                 393
+                                                             ],
+                                              "NativeSize":  [
+                                                                 189,
+                                                                 217
+                                                             ],
+                                              "Offset":  [
+                                                             6,
+                                                             2
+                                                         ],
+                                              "Scale":  0.55491329479768792
+                                          },
+                                          {
+                                              "Column":  3,
+                                              "SourceRect":  [
+                                                                 1098,
+                                                                 153,
+                                                                 341,
+                                                                 393
+                                                             ],
+                                              "NativeSize":  [
+                                                                 189,
+                                                                 218
+                                                             ],
+                                              "Offset":  [
+                                                             6,
+                                                             3
+                                                         ],
+                                              "Scale":  0.55491329479768792
+                                          },
+                                          {
+                                              "Column":  4,
+                                              "SourceRect":  [
+                                                                 1457,
+                                                                 154,
+                                                                 344,
+                                                                 392
+                                                             ],
+                                              "NativeSize":  [
+                                                                 191,
+                                                                 218
+                                                             ],
+                                              "Offset":  [
+                                                             4,
+                                                             3
+                                                         ],
+                                              "Scale":  0.55491329479768792
+                                          },
+                                          {
+                                              "Column":  5,
+                                              "SourceRect":  [
+                                                                 1816,
+                                                                 154,
+                                                                 346,
+                                                                 392
+                                                             ],
+                                              "NativeSize":  [
+                                                                 192,
+                                                                 218
+                                                             ],
+                                              "Offset":  [
+                                                             4,
+                                                             3
+                                                         ],
+                                              "Scale":  0.55491329479768792
+                                          }
+                                      ]
+                   }
+               ]
+}

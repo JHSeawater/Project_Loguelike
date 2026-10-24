@@ -7,6 +7,8 @@ import { BATTLE_CONFIG, BLESS_CONFIG, BOSS_CONFIG, CHARACTER_STATS, ENEMY_STATS,
 import { experienceToNextLevel } from './experience';
 import { BLESS_IDS, REWARDS, REWARD_TIERS, type RewardDef, type RewardId, type RewardTier } from './rewards';
 import { CharacterSelectScene, FONT, INPUT_DELAY_MS, TitleScene } from './menu-scenes';
+import { ENEMY_ART, SPRITE_ART, STRIP_ART, aegisScale, allyBoltArt, effectDisplay, orbTexture, shotArt, stripFrame } from './sprite-animation';
+import { loadSprite, createSpriteView, updateSpriteView, loadStrip, createStripView, type SpriteView } from './sprite-view';
 import './style.css';
 
 const CHOICE_CARD = { width: 220, height: 250, gap: 20, top: 230 };
@@ -20,15 +22,18 @@ const BOSS_BAR = { x: 676, y: 44, width: 576, height: 10 };
 
 class GameScene extends Phaser.Scene {
   private character: CharacterId = 'warlock';
-  private player!: Phaser.GameObjects.Rectangle;
+  private player!: Phaser.GameObjects.Sprite;
+  private playerView!: SpriteView;
+  private lastPlayerPosition = { x: 0, y: 0 };
   private battle!: Battle;
-  private enemyViews = new Map<number, Phaser.GameObjects.Rectangle>();
-  private zombieViews = new Map<number, Phaser.GameObjects.Rectangle>();
-  private shotViews = new Map<number, Phaser.GameObjects.Rectangle>();
-  private orbViews = new Map<number, Phaser.GameObjects.Rectangle>();
-  private effectViews = new Map<number, Phaser.GameObjects.Arc>();
+  private enemyViews = new Map<number, SpriteView>();
+  private zombieViews = new Map<number, SpriteView>();
+  private shotViews = new Map<number, Phaser.GameObjects.Sprite | Phaser.GameObjects.Rectangle>();
+  private orbViews = new Map<number, Phaser.GameObjects.Sprite>();
+  private effectViews = new Map<number, { ring?: Phaser.GameObjects.Arc; art: Phaser.GameObjects.Sprite[] }>();
   private hazardViews = new Map<number, Phaser.GameObjects.Graphics>();
   private aegisView?: Phaser.GameObjects.Arc;
+  private aegisArt?: Phaser.GameObjects.Sprite;
   private status!: Phaser.GameObjects.Text;
   private healthFill!: Phaser.GameObjects.Rectangle;
   private expFill!: Phaser.GameObjects.Rectangle;
@@ -61,6 +66,14 @@ class GameScene extends Phaser.Scene {
     this.character = data.character ?? 'warlock';
   }
 
+  preload(): void {
+    loadSprite(this, SPRITE_ART[this.character]);
+    if (this.character === 'necromancer') loadSprite(this, SPRITE_ART.zombie);
+    for (const profile of Object.values(ENEMY_ART)) loadSprite(this, profile);
+    const { allyMagicBolt, warlockBolt, ...shared } = STRIP_ART;
+    for (const profile of [allyBoltArt(this.character), ...Object.values(shared)]) loadStrip(this, profile);
+  }
+
   create(): void {
     // Phaser는 장면 객체를 다시 쓰므로, 이전 판의 표시 목록과 상태를 비우고 시작한다.
     this.enemyViews = new Map();
@@ -70,25 +83,25 @@ class GameScene extends Phaser.Scene {
     this.effectViews = new Map();
     this.hazardViews = new Map();
     this.aegisView = undefined;
+    this.aegisArt = undefined;
     this.shownGameOver = false;
     this.choiceViews = [];
     this.shownChoices = [];
     decorateWorld(this, this.worldWidth, this.worldHeight, this.wallThickness);
     this.battle = new Battle(createDungeon(this), { character: this.character });
 
-    this.player = this.add.rectangle(
-      this.worldWidth / 2,
-      this.worldHeight / 2,
-      40,
-      40,
-      CHARACTER_STATS[this.battle.character].color,
-    );
-    this.player.setDepth(getFootDepth({ y: this.player.y - 20, height: 40 }));
+    const body = this.battle.player;
+    this.lastPlayerPosition = { x: body.x, y: body.y };
+    this.playerView = createSpriteView(this, SPRITE_ART[this.character], 0, 0);
+    this.player = this.playerView.body;
+    this.positionPlayer();
+    this.player.setDepth(getFootDepth(body));
 
     const camera = this.cameras.main;
     camera.setBounds(0, 0, this.worldWidth, this.worldHeight);
-    camera.centerOn(this.player.x, this.player.y);
-    camera.startFollow(this.player, true, 1, 1);
+    camera.centerOn(body.x + body.width / 2, body.y + body.height / 2);
+    // 표시 원점은 발이다. 카메라는 판정 몸체의 중심을 추적한다.
+    camera.startFollow(this.player, true, 1, 1, 0, body.height / 2);
 
     // 가호를 고른 뒤에는 패널을 한 줄 늘려 누적 가호를 표시한다.
     this.hudPanel = this.add.rectangle(12, 12, 620, 112, 0x101612, 0.9).setOrigin(0).setScrollFactor(0).setDepth(20000);
@@ -156,53 +169,72 @@ class GameScene extends Phaser.Scene {
     const up = this.cursors?.up.isDown || this.wasd?.up.isDown;
     const down = this.cursors?.down.isDown || this.wasd?.down.isDown;
     this.battle.update(delta, { x: Number(Boolean(right)) - Number(Boolean(left)), y: Number(Boolean(down)) - Number(Boolean(up)) }, (body) => {
-      this.player.setPosition(body.x + body.width / 2, body.y + body.height / 2);
+      this.positionPlayer();
       const camera = this.cameras.main;
       // 이동 후의 실제 카메라 위치로 화면 내 조준과 화면 밖 생성을 판정한다.
-      camera.centerOn(this.player.x, this.player.y);
+      camera.centerOn(body.x + body.width / 2, body.y + body.height / 2);
       return { x: camera.scrollX, y: camera.scrollY, width: camera.width, height: camera.height };
     });
     this.syncBattle();
   }
 
+  private positionPlayer(): void {
+    const body = this.battle.player;
+    const x = body.x + body.width / 2;
+    const y = body.y + body.height;
+    this.player.setPosition(x, y);
+    this.playerView.magic?.setPosition(x, y);
+  }
+
   private syncBattle(): void {
     const battle = this.battle;
-    this.player.setDepth(getFootDepth(battle.player));
+    this.positionPlayer();
+    const pose = this.playerView.animator.sample(battle.time, {
+      x: battle.player.x - this.lastPlayerPosition.x, y: battle.player.y - this.lastPlayerPosition.y,
+    }, battle.playerAction);
+    this.lastPlayerPosition = { x: battle.player.x, y: battle.player.y };
     const hurtAge = battle.time - battle.player.lastHitAt;
-    this.player.setAlpha(hurtAge < BATTLE_CONFIG.player.hurtMs && !battle.gameOver && Math.floor(hurtAge / 120) % 2 === 0 ? 0.35 : 1);
+    const alpha = hurtAge < BATTLE_CONFIG.player.hurtMs && !battle.gameOver && Math.floor(hurtAge / 120) % 2 === 0 ? 0.35 : 1;
+    updateSpriteView(this.playerView, SPRITE_ART[this.character], pose,
+      this.player.x, this.player.y, getFootDepth(battle.player), alpha);
     const liveEnemies = new Set<number>();
     for (const enemy of battle.enemies) {
       liveEnemies.add(enemy.id);
+      // 각 적은 독립된 재생 상태를 갖고, 맞은 직후 0.1초 동안 흰색으로 점멸한다.
+      const art = ENEMY_ART[enemy.kind];
       let view = this.enemyViews.get(enemy.id);
       if (!view) {
-        // 보스는 금색 테두리로 다른 적과 구분한다.
-        const boss = enemy.kind === BOSS_CONFIG.kind;
-        view = this.add.rectangle(0, 0, enemy.width, enemy.height, ENEMY_STATS[enemy.kind].color)
-          .setStrokeStyle(boss ? 3 : 2, boss ? BOSS_CONFIG.strokeColor : 0x222823);
+        view = createSpriteView(this, art, enemy.x, enemy.y);
         this.enemyViews.set(enemy.id, view);
       }
-      view.setPosition(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2).setDepth(getFootDepth(enemy));
-      view.setFillStyle(battle.time - enemy.lastHitAt < 100 ? 0xffffff : ENEMY_STATS[enemy.kind].color);
+      const enemyPose = view.animator.sample(battle.time, { x: enemy.x - view.x, y: enemy.y - view.y }, enemy.action ?? null);
+      updateSpriteView(view, art, enemyPose, enemy.x + enemy.width / 2, enemy.y + enemy.height, getFootDepth(enemy), 1);
+      if (battle.time - enemy.lastHitAt < 100) view.body.setTintFill(0xffffff);
+      else view.body.clearTint();
+      view.x = enemy.x; view.y = enemy.y;
     }
     for (const [id, view] of this.enemyViews) {
-      if (!liveEnemies.has(id)) { view.destroy(); this.enemyViews.delete(id); }
+      if (!liveEnemies.has(id)) { view.body.destroy(); view.magic?.destroy(); this.enemyViews.delete(id); }
     }
-    // 좀비는 어두운 초록 사각형이며, 맞은 뒤 피격 간격 동안 플레이어처럼 깜빡인다.
+    // 각 좀비는 독립된 재생 상태를 갖고, 죽은 개체의 표시를 함께 정리한다.
     const liveZombies = new Set<number>();
     for (const zombie of battle.zombies) {
       if (zombie.hp <= 0) continue;
       liveZombies.add(zombie.id);
       let view = this.zombieViews.get(zombie.id);
       if (!view) {
-        view = this.add.rectangle(0, 0, zombie.width, zombie.height, SKILL_CONFIG.zombie.color).setStrokeStyle(2, 0x1d2a1a);
+        view = createSpriteView(this, SPRITE_ART.zombie, zombie.x, zombie.y);
         this.zombieViews.set(zombie.id, view);
       }
       const age = battle.time - zombie.lastHitAt;
-      view.setPosition(zombie.x + zombie.width / 2, zombie.y + zombie.height / 2).setDepth(getFootDepth(zombie))
-        .setAlpha(age < BATTLE_CONFIG.player.hurtMs && Math.floor(age / 120) % 2 === 0 ? 0.35 : 1);
+      const zombiePose = view.animator.sample(battle.time, { x: zombie.x - view.x, y: zombie.y - view.y }, zombie.action ?? null);
+      updateSpriteView(view, SPRITE_ART.zombie, zombiePose,
+        zombie.x + zombie.width / 2, zombie.y + zombie.height, getFootDepth(zombie),
+        age < BATTLE_CONFIG.player.hurtMs && Math.floor(age / 120) % 2 === 0 ? 0.35 : 1);
+      view.x = zombie.x; view.y = zombie.y;
     }
     for (const [id, view] of this.zombieViews) {
-      if (!liveZombies.has(id)) { view.destroy(); this.zombieViews.delete(id); }
+      if (!liveZombies.has(id)) { view.body.destroy(); view.magic?.destroy(); this.zombieViews.delete(id); }
     }
     // 보스 범위 공격의 경고는 판정 범위 그대로 그리고, 피해 시점이 다가올수록 진하게 한다. 몸체 위, 투사체 아래에 그린다.
     const liveHazards = new Set<number>();
@@ -224,22 +256,33 @@ class GameScene extends Phaser.Scene {
     for (const [id, view] of this.hazardViews) {
       if (!liveHazards.has(id)) { view.destroy(); this.hazardViews.delete(id); }
     }
-    // 신성 방벽이 유지되는 동안 보호 범위(보스 중심 반경)를 금색 원으로 표시한다.
+    // 신성 방벽이 유지되는 동안 보호 범위(보스 중심 반경)를 금색 원으로 표시하고, 같은 크기의 룬 고리를 반복 재생한다.
     const boss = battle.boss;
     if (boss && boss.hp > 0 && battle.time < battle.bossGuardUntil) {
       this.aegisView ??= this.add.circle(0, 0, BOSS_CONFIG.aegis.radius, BOSS_CONFIG.strokeColor, 0.1)
         .setStrokeStyle(3, BOSS_CONFIG.strokeColor).setDepth(9001);
-      this.aegisView.setPosition(boss.x + boss.width / 2, boss.y + boss.height / 2).setVisible(true);
-    } else this.aegisView?.setVisible(false);
+      this.aegisArt ??= createStripView(this, STRIP_ART.bossAegis).setScale(aegisScale()).setDepth(9002);
+      const x = boss.x + boss.width / 2, y = boss.y + boss.height / 2;
+      this.aegisView.setPosition(x, y).setVisible(true);
+      this.aegisArt.setPosition(x, y).setFrame(stripFrame(STRIP_ART.bossAegis, battle.time)).setVisible(true);
+    } else {
+      this.aegisView?.setVisible(false);
+      this.aegisArt?.setVisible(false);
+    }
     const liveShots = new Set<number>();
     for (const shot of battle.projectiles) {
       liveShots.add(shot.id);
+      // 그림은 판정 중심에 기준점을 두고 진행 방향으로 회전한다. 길이로 판정을 바꾸지 않는다.
+      const art = shotArt(shot, this.character);
       let view = this.shotViews.get(shot.id);
       if (!view) {
-        view = this.add.rectangle(0, 0, shot.width, shot.height, shot.color).setDepth(10000);
+        view = (art ? createStripView(this, art) : this.add.rectangle(0, 0, shot.width, shot.height, shot.color)).setDepth(10000);
         this.shotViews.set(shot.id, view);
       }
       view.setPosition(shot.x + shot.width / 2, shot.y + shot.height / 2);
+      if (art && view instanceof Phaser.GameObjects.Sprite) {
+        view.setRotation(Math.atan2(shot.vy, shot.vx)).setFrame(stripFrame(art, battle.time, shot.firedAt));
+      }
     }
     for (const [id, view] of this.shotViews) {
       if (!liveShots.has(id)) { view.destroy(); this.shotViews.delete(id); }
@@ -249,32 +292,37 @@ class GameScene extends Phaser.Scene {
       liveOrbs.add(orb.id);
       let view = this.orbViews.get(orb.id);
       if (!view) {
-        // 12×12 영역 안의 마름모: 한 변 12/√2의 사각형을 45도 회전한다.
-        const side = BATTLE_CONFIG.expOrb.size / Math.SQRT2;
-        view = this.add.rectangle(0, 0, side, side, 0).setAngle(45).setStrokeStyle(1, 0x1a1f2a);
+        view = createStripView(this, STRIP_ART.expOrb, orbTexture(orb.value));
         this.orbViews.set(orb.id, view);
       }
-      // 상한 초과로 값이 합쳐질 수 있으므로 색은 매 프레임 현재 값으로 정한다.
-      view.setFillStyle(orb.value >= 10 ? 0xff7a6b : orb.value >= 4 ? 0xffd65a : orb.value >= 2 ? 0x7ee08c : 0x6fb8ff);
+      // 상한 초과로 값이 합쳐질 수 있으므로 색은 매 프레임 현재 값으로 정한다. 구슬은 회전하지 않는다.
+      view.setTexture(orbTexture(orb.value), stripFrame(STRIP_ART.expOrb, battle.time));
       view.setPosition(orb.x + orb.width / 2, orb.y + orb.height / 2).setDepth(getFootDepth(orb));
     }
     for (const [id, view] of this.orbViews) {
       if (!liveOrbs.has(id)) { view.destroy(); this.orbViews.delete(id); }
     }
-    // 휘두르기·폭발 범위를 판정에 쓴 반경 그대로 잠시 보여주고 흐리게 사라지게 한다.
+    // 휘두르기·폭발·회복 범위는 판정에 쓴 반경 그대로 원을 잠시 보여주고 흐리게 사라지게 한다. 그 위에 효과 그림을
+    // 수명 동안 한 번 재생한다. 보스 타격과 좀비 부활은 경고 도형·소환물이 따로 있으므로 그림만 그린다.
     const liveEffects = new Set<number>();
     for (const effect of battle.effects) {
       liveEffects.add(effect.id);
+      const display = effectDisplay(effect, battle.time);
       let view = this.effectViews.get(effect.id);
       if (!view) {
         const color = effect.kind === 'swing' ? 0xc9b8ff : effect.kind === 'heal' ? 0xe58fb8 : effect.kind === 'blast' ? 0x8fd16a : 0xffa64d;
-        view = this.add.circle(effect.x, effect.y, effect.radius, color, 0.18).setStrokeStyle(2, color).setDepth(10001);
+        const ring = ['swing', 'explosion', 'heal', 'blast'].includes(effect.kind)
+          ? this.add.circle(effect.x, effect.y, effect.radius, color, 0.18).setStrokeStyle(2, color).setDepth(10001) : undefined;
+        const art = display.rotations.map((rotation) => createStripView(this, display.profile)
+          .setPosition(effect.x, effect.y).setScale(display.scaleX, display.scaleY).setRotation(rotation).setDepth(10002));
+        view = { ring, art };
         this.effectViews.set(effect.id, view);
       }
-      view.setAlpha(Math.max(0, 1 - (battle.time - effect.at) / SKILL_CONFIG.effectMs));
+      view.ring?.setAlpha(Math.max(0, 1 - (battle.time - effect.at) / SKILL_CONFIG.effectMs));
+      for (const sprite of view.art) sprite.setFrame(display.frame);
     }
     for (const [id, view] of this.effectViews) {
-      if (!liveEffects.has(id)) { view.destroy(); this.effectViews.delete(id); }
+      if (!liveEffects.has(id)) { view.ring?.destroy(); for (const sprite of view.art) sprite.destroy(); this.effectViews.delete(id); }
     }
     this.status.setText(`체력 ${battle.player.hp}/${battle.player.maxHp}    생존 ${(battle.time / 1000).toFixed(1)}초    적 ${battle.enemies.length}    처치 ${battle.kills}`);
     this.healthFill.setDisplaySize(180 * battle.player.hp / battle.player.maxHp, 10);

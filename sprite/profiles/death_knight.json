@@ -1,0 +1,53 @@
+{
+  "id": "death_knight",
+  "code_id": "deathKnight",
+  "folder": "characters",
+  "frame_size": [
+    96,
+    96
+  ],
+  "anchor": [
+    48,
+    92
+  ],
+  "body_size": [
+    40,
+    40
+  ],
+  "target_height": 60,
+  "source_rows": [
+    "down",
+    "left",
+    "right",
+    "up"
+  ],
+  "magic": "red",
+  "core_alpha": 240,
+  "body_alpha": 128,
+  "min_component_area": 3000,
+  "keep_parts": true,
+  "part_area": 150,
+  "animations": [
+    {
+      "name": "idle",
+      "source": "sprite/used/deathkinght_01.png",
+      "columns": 4,
+      "fps": 6,
+      "effect_required": false
+    },
+    {
+      "name": "walk",
+      "source": "sprite/used/deathkinght_02.png",
+      "columns": 6,
+      "fps": 10,
+      "effect_required": false
+    },
+    {
+      "name": "attack",
+      "source": "sprite/used/deathkinght_03.png",
+      "columns": 6,
+      "fps": 12,
+      "effect_required": true
+    }
+  ]
+}

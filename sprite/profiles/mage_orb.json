@@ -1,0 +1,19 @@
+{
+  "id": "mage_orb",
+  "layout": "strip",
+  "folder": "projectiles",
+  "source": "sprite/mage_orb.png",
+  "frames": 4,
+  "fps": 12,
+  "frame_size": [
+    24,
+    24
+  ],
+  "pivot": [
+    12,
+    12
+  ],
+  "target_width": 20,
+  "align": "center",
+  "alpha": "soft"
+}

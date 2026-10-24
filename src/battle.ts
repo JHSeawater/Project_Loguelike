@@ -30,6 +30,8 @@ export interface Enemy extends Walker {
   nextAttackAt: number;
   // 원거리 적·사제가 사거리 안에서 멈춰 있는지. 멈춘 동안은 다른 적의 이동을 막지 않는다.
   holding: boolean;
+  // 마지막 실제 발사·근접 공격의 표시용 기록. 판정에는 쓰지 않는다.
+  action?: PlayerCast;
 }
 
 // 네크로맨서의 좀비. 플레이어 편 소환물로, 적이 플레이어와 함께 공격 대상 후보로 삼는다.
@@ -37,6 +39,7 @@ export interface Zombie extends Walker {
   targetId: number | null;
   nextThinkAt: number;
   nextAttackAt: number;
+  action?: PlayerCast;
 }
 
 export interface Projectile extends Box {
@@ -51,12 +54,24 @@ export interface Projectile extends Box {
   homing?: boolean;
   // 발사된 게임 시간. 단계 끝에 발사되므로 다음 단계부터 움직인다.
   firedAt?: number;
+  // 적 투사체를 쏜 병종. 외형 선택에만 쓰고 판정에는 쓰지 않는다.
+  source?: EnemyKind;
 }
 
-// 휘두르기·폭발·사제 회복의 범위를 잠시 보여주기 위한 기록. 판정에는 쓰지 않는다.
+// 마지막 실제 발사의 표시용 기록. 투사체가 곧바로 적중·소멸해도 시전 동작을 놓치지 않는다.
+export interface PlayerCast {
+  at: number;
+  direction: Point;
+  attackMs: number;
+  // 공격과 시전을 모두 가진 보스에서 재생할 동작. 없으면 자산의 첫 행동 동작이다.
+  sheet?: 'attack' | 'cast';
+}
+
+// 휘두르기·폭발·사제 회복의 범위와 보스 타격·좀비 부활 지점을 잠시 보여주기 위한 기록. 판정에는 쓰지 않는다.
+// 좀비 부활의 (x, y)는 좀비 발밑 중앙이다.
 export interface AttackEffect {
   id: number;
-  kind: 'swing' | 'explosion' | 'heal' | 'blast';
+  kind: 'swing' | 'explosion' | 'heal' | 'blast' | 'brand' | 'cross' | 'raise';
   x: number;
   y: number;
   radius: number;
@@ -74,6 +89,10 @@ export interface Hazard {
 }
 
 // 성광 십자의 가로·세로 팔. 판정과 표시가 같은 사각형을 쓴다.
+export function effectLifetime(kind: AttackEffect['kind']): number {
+  return kind === 'brand' || kind === 'cross' || kind === 'raise' ? SKILL.impactMs : SKILL.effectMs;
+}
+
 export function crossArms(hazard: Point): [Box, Box] {
   const { width, length } = BOSS.cross;
   return [{ x: hazard.x - length, y: hazard.y - width / 2, width: length * 2, height: width },
@@ -158,6 +177,8 @@ export class Battle {
   zombies: Zombie[] = [];
   enemies: Enemy[] = [];
   projectiles: Projectile[] = [];
+  playerCast: PlayerCast | null = null;
+  playerAction: PlayerCast | null = null;
   effects: AttackEffect[] = [];
   // 생성 순서대로 유지해 상한 초과 시 가장 오래된 구슬을 찾는다.
   orbs: ExpOrb[] = [];
@@ -352,6 +373,7 @@ export class Battle {
     if (this.time < this.nextBossActionAt) return;
     this.nextBossActionAt = this.intervalFrom(this.nextBossActionAt) + BOSS.everyMs;
     const action = BOSS.cycle[this.bossActionIndex++ % BOSS.cycle.length];
+    this.recordEnemyAction(boss, target, BOSS.everyMs, 'cast');
     if (action === 'brand') this.addHazard('brand', center(target), BOSS.brand.warnMs);
     else if (action === 'cross') {
       this.addHazard('cross', center(boss), BOSS.cross.warnMs);
@@ -373,6 +395,7 @@ export class Battle {
       const damage = this.enemyDamage(hazard.kind === 'brand' ? BOSS.brand.damage : BOSS.cross.damage);
       // 피해 도중 좀비가 새로 일어날 수 있으므로(시체 폭발 연쇄) 시작 시점의 목록으로 판정한다.
       for (const ally of [...this.allies]) if (ally.hp > 0 && hazardTouches(hazard, ally)) this.dealDamage(ally, damage);
+      this.addEffect(hazard.kind, hazard, hazard.kind === 'brand' ? BOSS.brand.radius : BOSS.cross.length);
       return false;
     });
   }
@@ -534,18 +557,22 @@ export class Battle {
       speed: this.stats.speed * (1 + scale), attackMs: this.stats.attackMs * (1 - scale) };
   }
 
-  private fire(owner: Actor, target: Actor, team: Projectile['team'], damage: number, color: number, speed: number, offsetRad = 0): void {
+  private fire(owner: Actor, target: Actor, team: Projectile['team'], damage: number, color: number, speed: number, offsetRad = 0, source?: EnemyKind): void {
     const config = team === 'ally' ? CFG.playerShot : CFG.enemyShot;
     const from = center(owner), to = center(target);
     const length = Math.hypot(to.x - from.x, to.y - from.y) || 1;
     const direction = rotate((to.x - from.x) / length, (to.y - from.y) / length, offsetRad);
     this.projectiles.push({ id: this.nextId++, team, x: from.x - config.size / 2, y: from.y - config.size / 2,
       width: config.size, height: config.size, vx: direction.x * speed, vy: direction.y * speed,
-      damage, expiresAt: this.time + config.lifeMs, color, homing: team === 'ally' && this.skills.homing, firedAt: this.time });
+      damage, expiresAt: this.time + config.lifeMs, color, homing: team === 'ally' && this.skills.homing, firedAt: this.time,
+      ...(source && { source }) });
   }
 
   // 다중 시전: 대상 방향을 중심으로 10°씩 벌린 부채꼴로 발사하고, 전체 폭이 60°를 넘으면 그 안에서 고르게 나눈다.
-  private fireVolley(target: Actor, damage: number): void {
+  private fireVolley(target: Actor, damage: number, attackMs: number): void {
+    const from = center(this.player), to = center(target);
+    this.playerCast = { at: this.time, direction: { x: to.x - from.x, y: to.y - from.y }, attackMs };
+    this.playerAction = this.playerCast;
     const count = this.skills.shots;
     const spread = count > 1 ? Math.min(SKILL.multiShot.spreadDeg, SKILL.multiShot.maxSpreadDeg / (count - 1)) : 0;
     for (let i = 0; i < count; i++) {
@@ -564,7 +591,7 @@ export class Battle {
   }
 
   // 사제 회복: 자신을 제외하고 몸체가 반경 원에 닿은(경계 포함) 살아 있는 적을 최대 체력까지 회복한다. 장애물은 막지 않는다.
-  private healAround(priest: Enemy, radius: number, amount: number): void {
+  private healAround(priest: Enemy, radius: number, amount: number): boolean {
     const origin = center(priest);
     let healed = false;
     for (const other of this.enemies) {
@@ -573,6 +600,7 @@ export class Battle {
       healed = true;
     }
     if (healed) this.addEffect('heal', origin, radius);
+    return healed;
   }
 
   private addEffect(kind: AttackEffect['kind'], point: Point, radius: number): void {
@@ -580,11 +608,14 @@ export class Battle {
   }
 
   // 죽음의 칼날: 반경 안에 몸체가 닿은 적 전부를 한 번씩 벤다. 장애물 너머의 적은 맞히지 않는다.
-  private swing(damage: number): boolean {
+  private swing(damage: number, attackMs: number): boolean {
     const origin = center(this.player), radius = this.skills.swingRadius;
     const targets = this.enemies.filter((enemy) => enemy.hp > 0 && enemy.attackable && circleTouches(origin, radius, enemy)
       && !this.obstacles.some((obstacle) => segmentHit(origin, center(enemy), obstacle) !== null));
     if (!targets.length) return false;
+    const nearest = targets.reduce((best, enemy) => distanceSquared(this.player, enemy) < distanceSquared(this.player, best) ? enemy : best);
+    const to = center(nearest);
+    this.playerAction = { at: this.time, direction: { x: to.x - origin.x, y: to.y - origin.y }, attackMs };
     // 피의 광란으로 쌓인 강화는 이번 휘두르기 전체에 쓰고 사라진다. 이번 휘두르기로 처치하면 다음 휘두르기에 다시 쌓인다.
     const power = this.frenzyCharged ? damage * SKILL.bloodFrenzy.damageMultiplier : damage;
     this.frenzyCharged = false;
@@ -691,6 +722,8 @@ export class Battle {
       if (this.time < zombie.nextAttackAt
         || this.obstacles.some((obstacle) => segmentHit(center(zombie), center(target), obstacle) !== null)) continue;
       // 시체 강화는 이미 있는 좀비의 공격력에도 바로 적용된다.
+      const from = center(zombie), to = center(target);
+      zombie.action = { at: this.time, direction: { x: to.x - from.x, y: to.y - from.y }, attackMs: config.attackMs };
       this.killedByZombie = true;
       this.strike(target, Math.round(config.damage * this.skills.zombiePercent / 100));
       this.killedByZombie = false;
@@ -719,6 +752,7 @@ export class Battle {
       nextThinkAt: this.time, nextPathAt: this.time, nextAttackAt: this.time, path: [], pathIndex: 0, stuckMs: 0 };
     this.zombies.push(zombie);
     this.allies.push(zombie);
+    this.addEffect('raise', { x: zombie.x + zombie.width / 2, y: zombie.y + zombie.height }, 0);
   }
 
   // 시체 폭발: 좀비가 죽은 자리(좀비 중심)에서 몸체가 원에 닿은 적에게 플레이어 공격력의 비율만큼 피해를 준다.
@@ -753,22 +787,32 @@ export class Battle {
       const stats = ENEMY_STATS[enemy.kind];
       if (stats.heal) {
         if (this.time >= enemy.nextAttackAt) {
-          this.healAround(enemy, stats.heal.radius, stats.heal.amount);
+          // 실제로 회복한 경우에만 시전 동작을 기록한다. 방향 0은 현재 바라보는 방향을 유지한다.
+          if (this.healAround(enemy, stats.heal.radius, stats.heal.amount)) {
+            enemy.action = { at: this.time, direction: { x: 0, y: 0 }, attackMs: stats.attackMs };
+          }
           enemy.nextAttackAt = this.intervalFrom(enemy.nextAttackAt) + stats.attackMs;
         }
       } else if (stats.ranged) {
         if (distanceSquared(enemy, target) <= stats.range ** 2 && this.time >= enemy.nextAttackAt) {
-          this.fire(enemy, target, 'enemy', this.enemyDamage(stats.damage), stats.color, stats.shotSpeed ?? CFG.enemyShot.speed);
+          this.recordEnemyAction(enemy, target, stats.attackMs);
+          this.fire(enemy, target, 'enemy', this.enemyDamage(stats.damage), stats.color, stats.shotSpeed ?? CFG.enemyShot.speed, 0, enemy.kind);
           enemy.nextAttackAt = this.intervalFrom(enemy.nextAttackAt) + stats.attackMs;
         }
       } else if (edgeDistance(enemy, target) <= 0.75 && this.time >= enemy.nextAttackAt
         && !this.obstacles.some((obstacle) => segmentHit(center(enemy), center(target), obstacle) !== null)) {
         // 근접 적은 몸이 닿은 순간 한 번 때리고, 붙어 있는 동안 공격 간격마다 때린다. 대상이 피격 간격 중이라
         // 피해가 없어도 한 번의 공격으로 센다.
+        this.recordEnemyAction(enemy, target, stats.attackMs);
         this.dealDamage(target, this.enemyDamage(stats.damage));
         enemy.nextAttackAt = this.intervalFrom(enemy.nextAttackAt) + stats.attackMs;
       }
     }
+  }
+
+  private recordEnemyAction(enemy: Enemy, target: Actor, attackMs: number, sheet?: PlayerCast['sheet']): void {
+    const from = center(enemy), to = center(target);
+    enemy.action = { at: this.time, direction: { x: to.x - from.x, y: to.y - from.y }, attackMs, ...(sheet && { sheet }) };
   }
 
   private updateProjectiles(dt: number): void {
@@ -864,7 +908,7 @@ export class Battle {
     for (const enemy of this.enemies) this.origins.set(enemy, { x: enemy.x, y: enemy.y });
     // 배리어는 마지막 피격 뒤 일정 시간 동안 피해를 받지 않으면 다시 가득 찬다.
     if (this.barrier < this.barrierMax && this.time - this.player.lastHitAt >= BOSS_REWARD.barrierRegenMs) this.barrier = this.barrierMax;
-    this.effects = this.effects.filter((effect) => this.time - effect.at < SKILL.effectMs);
+    this.effects = this.effects.filter((effect) => this.time - effect.at < effectLifetime(effect.kind));
     const length = Math.hypot(input.x, input.y);
     if (length) {
       const distance = power.speed * dt / 1000;
@@ -882,11 +926,11 @@ export class Battle {
     const attackReadyAt = this.lastPlayerAttackAt + power.attackMs;
     if (this.time >= attackReadyAt) {
       if (CHARACTER_STATS[this.character].attack === 'swing') {
-        if (this.swing(power.damage)) this.lastPlayerAttackAt = this.intervalFrom(attackReadyAt);
+        if (this.swing(power.damage, power.attackMs)) this.lastPlayerAttackAt = this.intervalFrom(attackReadyAt);
       } else {
         const target = nearestTarget(this.player, this.enemies, view);
         if (target) {
-          this.fireVolley(target, power.damage);
+          this.fireVolley(target, power.damage, power.attackMs);
           this.lastPlayerAttackAt = this.intervalFrom(attackReadyAt);
         }
       }

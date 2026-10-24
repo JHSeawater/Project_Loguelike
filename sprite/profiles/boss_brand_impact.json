@@ -1,0 +1,20 @@
+{
+  "id": "boss_brand_impact",
+  "layout": "strip",
+  "folder": "effects",
+  "source": "sprite/boss_brand_impact.png",
+  "frames": 6,
+  "fps": 12,
+  "frame_size": [
+    208,
+    232
+  ],
+  "pivot": [
+    104,
+    116
+  ],
+  "target_width": 200,
+  "align": "center",
+  "alpha": "soft",
+  "split": "valley"
+}

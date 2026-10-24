@@ -1,0 +1,51 @@
+{
+    "asset":  "crossbow_bolt",
+    "input_hash":  "7b4ecfef1fc7d0b9deae5d45e8abc82ce258adc6ec6a2b13046f8b390295dd0c",
+    "outputs":  {
+                    "crossbow_bolt.png":  "745872e71aedb7458da1f11afc768c9ba1bf1d81176c4052592b1097da498ecc"
+                },
+    "sheets":  [
+                   {
+                       "animation":  "strip",
+                       "source":  "sprite/crossbow_bolt.png",
+                       "source_sha256":  "4fc44b061856991a369bc955ddae59c8fc801981c80c541a915f9da2b0702e21",
+                       "sheets":  [
+                                      "crossbow_bolt.png"
+                                  ],
+                       "frame_size_px":  [
+                                             24,
+                                             12
+                                         ],
+                       "sheet_size_px":  [
+                                             24,
+                                             12
+                                         ],
+                       "frame_count":  1,
+                       "fps":  1,
+                       "pivot_px":  [
+                                        12,
+                                        6
+                                    ],
+                       "extraction":  [
+                                          {
+                                              "Column":  0,
+                                              "SourceRect":  [
+                                                                 642,
+                                                                 379,
+                                                                 516,
+                                                                 184
+                                                             ],
+                                              "NativeSize":  [
+                                                                 20,
+                                                                 7
+                                                             ],
+                                              "Offset":  [
+                                                             2,
+                                                             2
+                                                         ],
+                                              "Scale":  0.03875968992248062
+                                          }
+                                      ]
+                   }
+               ]
+}

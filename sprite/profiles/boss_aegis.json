@@ -1,0 +1,20 @@
+{
+  "id": "boss_aegis",
+  "layout": "strip",
+  "folder": "effects",
+  "source": "sprite/boss_aegis.png",
+  "frames": 6,
+  "fps": 12,
+  "frame_size": [
+    200,
+    224
+  ],
+  "pivot": [
+    100,
+    112
+  ],
+  "target_width": 192,
+  "align": "center",
+  "alpha": "soft",
+  "split": "valley"
+}

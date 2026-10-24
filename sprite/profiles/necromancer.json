@@ -1,0 +1,53 @@
+{
+  "id": "necromancer",
+  "code_id": "necromancer",
+  "folder": "characters",
+  "frame_size": [
+    64,
+    64
+  ],
+  "anchor": [
+    32,
+    60
+  ],
+  "body_size": [
+    40,
+    40
+  ],
+  "target_height": 52,
+  "source_rows": [
+    "down",
+    "left",
+    "right",
+    "up"
+  ],
+  "magic": "cyan",
+  "core_alpha": 240,
+  "body_alpha": 128,
+  "min_component_area": 3000,
+  "keep_parts": true,
+  "part_area": 30,
+  "animations": [
+    {
+      "name": "idle",
+      "source": "sprite/used/necromancer_01.png",
+      "columns": 4,
+      "fps": 6,
+      "effect_required": true
+    },
+    {
+      "name": "walk",
+      "source": "sprite/used/necromancer_02.png",
+      "columns": 6,
+      "fps": 10,
+      "effect_required": true
+    },
+    {
+      "name": "cast",
+      "source": "sprite/used/necromancer_03.png",
+      "columns": 6,
+      "fps": 12,
+      "effect_required": true
+    }
+  ]
+}

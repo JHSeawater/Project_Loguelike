@@ -1,0 +1,137 @@
+[
+    {
+        "asset":  "ally_magic_bolt",
+        "status":  "cached",
+        "preview_required":  false
+    },
+    {
+        "asset":  "archer",
+        "status":  "cached",
+        "preview_required":  false
+    },
+    {
+        "asset":  "archer_arrow",
+        "status":  "cached",
+        "preview_required":  false
+    },
+    {
+        "asset":  "boss_aegis",
+        "status":  "cached",
+        "preview_required":  false
+    },
+    {
+        "asset":  "boss_brand_impact",
+        "status":  "cached",
+        "preview_required":  false
+    },
+    {
+        "asset":  "boss_cross_impact",
+        "status":  "cached",
+        "preview_required":  false
+    },
+    {
+        "asset":  "commander",
+        "status":  "cached",
+        "preview_required":  false
+    },
+    {
+        "asset":  "corpse_blast",
+        "status":  "cached",
+        "preview_required":  false
+    },
+    {
+        "asset":  "crossbow_bolt",
+        "status":  "cached",
+        "preview_required":  false
+    },
+    {
+        "asset":  "crossbowman",
+        "status":  "cached",
+        "preview_required":  false
+    },
+    {
+        "asset":  "death_knight",
+        "status":  "cached",
+        "preview_required":  false
+    },
+    {
+        "asset":  "death_slash",
+        "status":  "cached",
+        "preview_required":  false
+    },
+    {
+        "asset":  "exp_orb",
+        "status":  "cached",
+        "preview_required":  false
+    },
+    {
+        "asset":  "knight",
+        "status":  "cached",
+        "preview_required":  false
+    },
+    {
+        "asset":  "mage",
+        "status":  "cached",
+        "preview_required":  false
+    },
+    {
+        "asset":  "mage_orb",
+        "status":  "cached",
+        "preview_required":  false
+    },
+    {
+        "asset":  "magic_explosion",
+        "status":  "cached",
+        "preview_required":  false
+    },
+    {
+        "asset":  "necromancer",
+        "status":  "cached",
+        "preview_required":  false
+    },
+    {
+        "asset":  "paladin",
+        "status":  "cached",
+        "preview_required":  false
+    },
+    {
+        "asset":  "priest",
+        "status":  "cached",
+        "preview_required":  false
+    },
+    {
+        "asset":  "priest_heal",
+        "status":  "cached",
+        "preview_required":  false
+    },
+    {
+        "asset":  "raise_zombie",
+        "status":  "cached",
+        "preview_required":  false
+    },
+    {
+        "asset":  "soldier",
+        "status":  "cached",
+        "preview_required":  false
+    },
+    {
+        "asset":  "warlock",
+        "status":  "cached",
+        "preview_required":  false
+    },
+    {
+        "asset":  "warlock_bolt",
+        "status":  "cached",
+        "preview_required":  false
+    },
+    {
+        "asset":  "zealot",
+        "status":  "cached",
+        "preview_required":  false
+    },
+    {
+        "asset":  "zombie",
+        "status":  "cached",
+        "preview_required":  false
+    }
+]

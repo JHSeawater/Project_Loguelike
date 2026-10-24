@@ -7,7 +7,8 @@
     "test": "node --test",
     "dev": "vite --host 127.0.0.1 --port 5173 --strictPort",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview --host 127.0.0.1"
+    "preview": "vite preview --host 127.0.0.1",
+    "sprites:process": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/process-sprites.ps1"
   },
   "dependencies": {
     "phaser": "3.90.0"

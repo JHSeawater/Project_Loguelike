@@ -1,0 +1,20 @@
+{
+  "id": "priest_heal",
+  "layout": "strip",
+  "folder": "effects",
+  "source": "sprite/priest_heal.png",
+  "frames": 6,
+  "fps": 12,
+  "frame_size": [
+    200,
+    384
+  ],
+  "pivot": [
+    100,
+    342
+  ],
+  "target_width": 192,
+  "align": "bottom",
+  "alpha": "soft",
+  "split": "valley"
+}

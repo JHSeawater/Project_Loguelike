@@ -1,0 +1,105 @@
+{
+    "asset":  "magic_explosion",
+    "input_hash":  "0cf8d53a3f1112e324e9a1c6e9d4fa7a201001cd7d0a32c3712730ad08469bf9",
+    "outputs":  {
+                    "magic_explosion.png":  "0ff1868716cdaf435c857a0bf09bded7dfacaec5de56dedf752bd813a253c258"
+                },
+    "sheets":  [
+                   {
+                       "animation":  "strip",
+                       "source":  "sprite/magic_explosion.png",
+                       "source_sha256":  "c4307e2df0cce09a738d9b56128a758b00b3b97cabc49d3f2aa1f49e67f77ec6",
+                       "sheets":  [
+                                      "magic_explosion.png"
+                                  ],
+                       "frame_size_px":  [
+                                             104,
+                                             104
+                                         ],
+                       "sheet_size_px":  [
+                                             416,
+                                             104
+                                         ],
+                       "frame_count":  4,
+                       "fps":  12,
+                       "pivot_px":  [
+                                        52,
+                                        52
+                                    ],
+                       "extraction":  [
+                                          {
+                                              "Column":  0,
+                                              "SourceRect":  [
+                                                                 120,
+                                                                 227,
+                                                                 320,
+                                                                 279
+                                                             ],
+                                              "NativeSize":  [
+                                                                 57,
+                                                                 49
+                                                             ],
+                                              "Offset":  [
+                                                             24,
+                                                             28
+                                                         ],
+                                              "Scale":  0.17712177121771219
+                                          },
+                                          {
+                                              "Column":  1,
+                                              "SourceRect":  [
+                                                                 588,
+                                                                 165,
+                                                                 383,
+                                                                 398
+                                                             ],
+                                              "NativeSize":  [
+                                                                 68,
+                                                                 70
+                                                             ],
+                                              "Offset":  [
+                                                             18,
+                                                             17
+                                                         ],
+                                              "Scale":  0.17712177121771219
+                                          },
+                                          {
+                                              "Column":  2,
+                                              "SourceRect":  [
+                                                                 1047,
+                                                                 77,
+                                                                 542,
+                                                                 544
+                                                             ],
+                                              "NativeSize":  [
+                                                                 96,
+                                                                 94
+                                                             ],
+                                              "Offset":  [
+                                                             4,
+                                                             4
+                                                         ],
+                                              "Scale":  0.17712177121771219
+                                          },
+                                          {
+                                              "Column":  3,
+                                              "SourceRect":  [
+                                                                 1657,
+                                                                 115,
+                                                                 457,
+                                                                 501
+                                                             ],
+                                              "NativeSize":  [
+                                                                 81,
+                                                                 89
+                                                             ],
+                                              "Offset":  [
+                                                             12,
+                                                             8
+                                                         ],
+                                              "Scale":  0.17712177121771219
+                                          }
+                                      ]
+                   }
+               ]
+}

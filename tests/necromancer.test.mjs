@@ -244,7 +244,9 @@ test('corpse blast hits enemies touching an 80px circle with 200% of the player 
   const outside = tough(2, 'soldier', 1960, 2080.5);
   const zombie = raiseAt(battle, 2000, 2000);
   battle.enemies.push(inside, outside);
-  assert.deepEqual([100000 - inside.hp, 100000 - outside.hp, battle.effects.length], [0, 0, 0]);
+  assert.deepEqual([100000 - inside.hp, 100000 - outside.hp, battle.effects.filter((effect) => effect.kind === 'blast').length], [0, 0, 0]);
+  // 부활 표시는 좀비 발밑 중앙에 남는다(표시 전용).
+  assert.deepEqual(battle.effects.map((effect) => [effect.kind, effect.x, effect.y]), [['raise', zombie.x + zombie.width / 2, zombie.y + zombie.height]]);
   // 좀비가 죽으면 그 중심에서 폭발한다. 오른쪽 병사의 왼쪽 면까지 정확히 80px이면 맞고, 80.5px이면 맞지 않는다. 12 × 200% = 24.
   state.roll = 0.99;
   battle.dealDamage(zombie, 1000);

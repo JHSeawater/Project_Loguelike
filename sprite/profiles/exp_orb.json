@@ -1,0 +1,37 @@
+{
+  "id": "exp_orb",
+  "layout": "strip",
+  "folder": "pickups",
+  "source": "sprite/exp_orb.png",
+  "frames": 4,
+  "fps": 8,
+  "frame_size": [
+    16,
+    16
+  ],
+  "pivot": [
+    8,
+    8
+  ],
+  "target_width": 13,
+  "align": "center",
+  "alpha": "binary",
+  "palettes": [
+    {
+      "suffix": "blue",
+      "color": "#6fb8ff"
+    },
+    {
+      "suffix": "green",
+      "color": "#7ee08c"
+    },
+    {
+      "suffix": "gold",
+      "color": "#ffd65a"
+    },
+    {
+      "suffix": "red",
+      "color": "#ff7a6b"
+    }
+  ]
+}

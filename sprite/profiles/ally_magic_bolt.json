@@ -1,0 +1,19 @@
+{
+  "id": "ally_magic_bolt",
+  "layout": "strip",
+  "folder": "projectiles",
+  "source": "sprite/ally_magic_bolt.png",
+  "frames": 4,
+  "fps": 12,
+  "frame_size": [
+    32,
+    16
+  ],
+  "pivot": [
+    24,
+    8
+  ],
+  "target_width": 23,
+  "align": "core",
+  "alpha": "soft"
+}

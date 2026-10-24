@@ -43,8 +43,8 @@ export interface EnemyStats {
 // 기사는 가로형, 성기사는 세로형 몸체를 쓴다.
 export const ENEMY_STATS: Record<EnemyKind, EnemyStats> = {
   soldier: { name: '병사', width: 40, height: 40, hp: 25, damage: 10, speed: 110, range: 40, attackMs: 800, ranged: false, color: 0xdb6464, exp: 1 },
-  knight: { name: '기사', width: 80, height: 60, hp: 75, damage: 20, speed: 160, range: 40, attackMs: 1000, ranged: false, color: 0x819ce0, exp: 3 },
-  paladin: { name: '성기사', width: 60, height: 80, hp: 130, damage: 25, speed: 75, range: 40, attackMs: 1200, ranged: false, color: 0xdfbe5d, exp: 4 },
+  knight: { name: '기사', width: 80, height: 60, hp: 75, damage: 20, speed: 160, range: 40, attackMs: 1800, ranged: false, color: 0x819ce0, exp: 3 },
+  paladin: { name: '성기사', width: 60, height: 80, hp: 130, damage: 25, speed: 75, range: 40, attackMs: 2200, ranged: false, color: 0xdfbe5d, exp: 4 },
   archer: { name: '궁사', width: 30, height: 40, hp: 15, damage: 5, speed: 120, range: 280, attackMs: 5000, ranged: true, color: 0xa7c26b, exp: 1 },
   mage: { name: '마법사', width: 40, height: 40, hp: 20, damage: 10, speed: 100, range: 200, attackMs: 10000, ranged: true, color: 0xbc83d6, exp: 2 },
   zealot: { name: '광신도', width: 25, height: 30, hp: 12, damage: 6, speed: 250, range: 40, attackMs: 500, ranged: false, color: 0xe08a3c, exp: 0.5 },
@@ -159,4 +159,6 @@ export const SKILL_CONFIG = {
   contagion: { percent: 20 },
   corpseBlast: { radius: 80, damagePercent: 200 },
   effectMs: 150,
+  // 보스 타격·좀비 부활처럼 판정 범위를 보여주지 않는 장식 효과의 표시 시간(게임 시간).
+  impactMs: 300,
 } as const;
